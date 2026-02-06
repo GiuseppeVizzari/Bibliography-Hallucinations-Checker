@@ -17,7 +17,7 @@ load_dotenv()
 cr = Crossref()
 
 # Set user agent for OpenAlex (polite pool - faster responses)
-pyalex.config.email = "giuseppe.vizzari@unimib.it"
+pyalex.config.email = "your-email@example.com"
 
 print("[INIT] Initializing OpenAlex, Crossref & DataCite...")
 print("[INIT] ✓ Verification engines ready")
