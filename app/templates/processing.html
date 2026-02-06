@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="text-center">
+    <h3>Processing Bibliography...</h3>
+    <div class="spinner-border text-primary my-4" role="status" style="width: 3rem; height: 3rem;">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <div class="alert alert-info">
+        <p><strong>Checking {{ total_refs }} references.</strong></p>
+        <p>This may take a minute or two. Please wait...</p>
+        <p class="mb-0"><small>Using OpenAlex API for high-speed verification.</small></p>
+    </div>
+</div>
+{% endblock %}

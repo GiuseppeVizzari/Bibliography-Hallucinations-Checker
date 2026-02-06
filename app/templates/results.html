@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Analysis Results</h3>
+    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">Check Another</a>
+</div>
+
+<div class="alert alert-info">
+    <strong>Processed {{ total_count }} references</strong> using OpenAlex.
+</div>
+
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr>
+                <th style="width: 5%">#</th>
+                <th style="width: 35%">Extracted Reference</th>
+                <th style="width: 8%">Status</th>
+                <th style="width: 12%">Source</th>
+                <th style="width: 40%">Online Data</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in results %}
+            <tr>
+                <td class="text-center"><strong>{{ item.number }}</strong></td>
+                <td class="small">{{ item.original }}</td>
+                <td class="text-center">
+                    {% if item.check.status == 'found' %}
+                        <span class="badge bg-success">Found</span>
+                    {% elif item.check.status == 'skipped' %}
+                        <span class="badge bg-secondary">Skipped</span>
+                    {% elif item.check.status == 'error' %}
+                        <span class="badge bg-warning">Error</span>
+                    {% else %}
+                        <span class="badge bg-danger">Not Found</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if item.check.status == 'found' %}
+                        {% if item.check.source == 'OpenAlex' %}
+                            <span class="badge bg-primary">OpenAlex</span>
+                        {% elif item.check.source == 'Crossref' %}
+                            <span class="badge bg-info">Crossref</span>
+                        {% elif item.check.source == 'DataCite' %}
+                            <span class="badge bg-success">DataCite</span>
+                        {% elif item.check.source == 'arXiv' %}
+                            <span class="badge bg-dark">arXiv</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ item.check.source }}</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td class="small">
+                    {% if item.check.status == 'found' %}
+                        <strong>{{ item.check.title }}</strong><br>
+                        <em>{{ item.check.author }}</em><br>
+                        {{ item.check.venue }} ({{ item.check.pub_year }})<br>
+                        {% if item.check.url != '#' %}
+                        <a href="{{ item.check.url }}" target="_blank">Link</a>
+                        {% endif %}
+                    {% elif item.check.status == 'error' %}
+                        <span class="text-warning"><strong>Error occurred:</strong> {{ item.check.message }}</span>
+                    {% elif item.check.status == 'skipped' %}
+                        <span class="text-muted">{{ item.check.reason }}</span>
+                    {% else %}
+                        <span class="text-muted">No match found in OpenAlex, Crossref, DataCite, or arXiv.</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

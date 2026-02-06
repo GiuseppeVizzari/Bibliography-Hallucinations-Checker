@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">Check your PDF</h5>
+        <p class="card-text">Upload a PDF paper. We will extract the bibliography and verify references against <strong>OpenAlex</strong>.</p>
+        <div class="alert alert-info">
+            <strong>Verification:</strong> References are checked in OpenAlex, Crossref, DataCite, and arXiv.
+        </div>
+        <div class="alert alert-secondary">
+            <small><strong>File limit:</strong> Maximum 16MB</small>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="mt-4">
+            <div class="mb-3">
+                <label for="file" class="form-label">Select PDF file</label>
+                <input class="form-control" type="file" id="file" name="file" accept=".pdf" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Check Bibliography</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

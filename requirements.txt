@@ -1,0 +1,7 @@
+flask
+pymupdf
+werkzeug
+python-dotenv
+pyalex
+habanero
+requests

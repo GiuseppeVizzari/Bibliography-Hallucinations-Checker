@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="alert alert-danger" role="alert">
+    <h4 class="alert-heading">File Too Large</h4>
+    <p>The PDF file you uploaded is too large. The maximum file size is <strong>{{ max_size_mb }}MB</strong>.</p>
+    <hr>
+    <p class="mb-0">Please try uploading a smaller file, or compress your PDF to reduce its size.</p>
+</div>
+
+<div class="text-center mt-4">
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Try Again</a>
+</div>
+{% endblock %}
