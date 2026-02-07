@@ -24,12 +24,16 @@
         </thead>
         <tbody>
             {% for item in results %}
-            <tr>
+            <tr {% if item.check.status == 'found' and item.check.similarity < 0.6 %}class="table-warning"{% endif %}>
                 <td class="text-center"><strong>{{ item.number }}</strong></td>
                 <td class="small">{{ item.original }}</td>
                 <td class="text-center">
                     {% if item.check.status == 'found' %}
-                        <span class="badge bg-success">Found</span>
+                        {% if item.check.similarity >= 0.6 %}
+                            <span class="badge bg-success">Found</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Check Match</span>
+                        {% endif %}
                     {% elif item.check.status == 'skipped' %}
                         <span class="badge bg-secondary">Skipped</span>
                     {% elif item.check.status == 'error' %}
@@ -60,8 +64,18 @@
                         <strong>{{ item.check.title }}</strong><br>
                         <em>{{ item.check.author }}</em><br>
                         {{ item.check.venue }} ({{ item.check.pub_year }})<br>
-                        {% if item.check.url != '#' %}
-                        <a href="{{ item.check.url }}" target="_blank">Link</a>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            {% if item.check.url != '#' %}
+                            <a href="{{ item.check.url }}" target="_blank">Link</a>
+                            {% endif %}
+                            <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}text-warning border-warning{% else %}text-danger border-danger{% endif %} small">
+                                Similarity: {{ (item.check.similarity * 100)|round|int }}%
+                            </span>
+                        </div>
+                        {% if item.check.similarity < 0.6 %}
+                        <div class="text-danger mt-1" style="font-size: 0.75rem;">
+                            <strong>Caution:</strong> Found reference title differs significantly from extracted text.
+                        </div>
                         {% endif %}
                     {% elif item.check.status == 'error' %}
                         <span class="text-warning"><strong>Error occurred:</strong> {{ item.check.message }}</span>

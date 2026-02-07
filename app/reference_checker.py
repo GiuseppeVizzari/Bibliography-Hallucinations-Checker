@@ -9,6 +9,7 @@ import re
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from difflib import SequenceMatcher
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +45,30 @@ def extract_title_from_reference(ref_text):
     
     # Fallback
     return text[:100].strip()
+
+def calculate_similarity(text1, text2):
+    """
+    Calculates similarity between two strings using SequenceMatcher.
+    Normalizes strings by removing punctuation and converting to lowercase.
+    """
+    if not text1 or not text2:
+        return 0.0
+    
+    # Basic normalization: remove punctuation and lower case
+    def normalize(text):
+        # Remove non-alphanumeric chars (keep spaces)
+        clean = re.sub(r'[^\w\s]', '', text)
+        return clean.lower().strip()
+    
+    s1 = normalize(text1)
+    s2 = normalize(text2)
+    
+    # If one is empty after normalization but wasn't before, use original
+    if not s1 or not s2:
+        s1 = text1.lower().strip()
+        s2 = text2.lower().strip()
+        
+    return SequenceMatcher(None, s1, s2).ratio()
 
 def extract_doi_info(ref_text):
     """
@@ -414,37 +439,47 @@ def check_reference(ref_text):
     print(f"\n[DEBUG] Checking reference...")
     print(f"  Original: {ref_text[:100]}...")
 
+    # 0. Pre-extract title for similarity comparison later
+    extracted_title = extract_title_from_reference(ref_text)
+
     # 1. Extract Initial DOI Info
     doi, end_pos = extract_doi_info(ref_text)
     
+    result = None
+
     # 2. Try DOI matches if available
     if doi:
         print(f"  → Found Initial DOI: {doi}")
         
         # Initial Search Cycle
         result = run_doi_search_cycle(doi)
-        if result["status"] == "found":
-            return result
-            
+        
         # 3. DOI HEALING: If initial lookup fails, try to expand it
-        print("  → DOI not found. Attempting to heal/expand...")
-        healed_doi, new_pos = heal_doi(doi, end_pos, ref_text)
-        if healed_doi:
-            result = run_doi_search_cycle(healed_doi)
-            if result["status"] == "found":
-                return result
+        if not result or result["status"] != "found":
+            print("  → DOI not found. Attempting to heal/expand...")
+            healed_doi, new_pos = heal_doi(doi, end_pos, ref_text)
+            if healed_doi:
+                result = run_doi_search_cycle(healed_doi)
 
     # 4. arXiv Support
-    arxiv_id = extract_arxiv_id(ref_text)
-    if arxiv_id:
-        print(f"  → Found arXiv ID: {arxiv_id}")
-        result = check_arxiv(arxiv_id)
-        if result["status"] == "found":
-            return result
+    if not result or result["status"] != "found":
+        arxiv_id = extract_arxiv_id(ref_text)
+        if arxiv_id:
+            print(f"  → Found arXiv ID: {arxiv_id}")
+            result = check_arxiv(arxiv_id)
 
     # 5. Fallback to Title Search
-    title = extract_title_from_reference(ref_text)
-    print(f"  Extracted title: {title[:80]}...")
-    print("  → Falling back to title search...")
-    return check_openalex(title)
+    if not result or result["status"] != "found":
+        print(f"  Extracted title: {extracted_title[:80]}...")
+        print("  → Falling back to title search...")
+        result = check_openalex(extracted_title)
+
+    # Add similarity score if something was found
+    if result and result.get("status") == "found":
+        found_title = result.get("title", "")
+        similarity = calculate_similarity(extracted_title, found_title)
+        result["similarity"] = similarity
+        print(f"  [DEBUG] Similarity score: {similarity:.2f}")
+
+    return result
 
