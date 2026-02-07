@@ -56,3 +56,16 @@ The app performs a multi-stage verification process to ensure references in your
 
 ### Port 5000 in Use (macOS)
 - If you see "Address already in use", disable **'AirPlay Receiver'** in System Settings -> General -> AirDrop & Handoff, as it often occupies port 5000.
+
+## Acknowledgments
+
+This project is built using several powerful open-source libraries and APIs:
+
+- **[PyMuPDF (fitz)](https://github.com/pymupdf/PyMuPDF)**: For extracting text and metadata from PDF documents.
+- **[Flask](https://flask.palletsprojects.com/)**: To provide the web-based user interface and application routing.
+- **[pyalex](https://github.com/jperkel/pyalex)**: The Python client for the **[OpenAlex API](https://openalex.org/)**, used for high-speed scholarly work verification.
+- **[habanero](https://github.com/sckott/habanero)**: A low-level client for the **[Crossref API](https://www.crossref.org/)**, providing reliable fallback for DOI lookups.
+- **[DataCite API](https://support.datacite.org/docs/api)**: Used for verifying Zenodo and other repository-hosted DOIs.
+- **[arXiv API](https://arxiv.org/help/api)**: Used for direct verification of pre-print identifiers.
+- **[python-dotenv](https://github.com/theskumar/python-dotenv)**: For managing environment variables securely.
+- **[Requests](https://requests.readthedocs.io/)**: To handle all API communications.
