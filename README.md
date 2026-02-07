@@ -8,11 +8,10 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configure Your Email (Optional)
-The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polite pool"), you can add your email to `app/reference_checker.py`:
+The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polite pool"), you can add your email to the `.env` file:
 
-```python
-# app/reference_checker.py line 16
-pyalex.config.email = "your-email@example.com"
+```env
+OPENALEX_EMAIL=your-email@example.com
 ```
 
 ### 3. Run the Application
