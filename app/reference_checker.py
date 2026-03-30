@@ -179,7 +179,10 @@ def check_openalex(title):
     try:
         print(f"  OpenAlex title search: {title[:70]}...")
         
-        results = Works().search(title).get()
+        # Normalize curly quotes which can break the OpenAlex search API
+        clean_title = title.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"')
+        
+        results = Works().search(clean_title).get()
         
         if results and len(results) > 0:
             res = process_openalex_work(results[0])

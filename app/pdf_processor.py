@@ -1,6 +1,19 @@
 import fitz  # PyMuPDF
 import re
 
+def heal_hyphens(text):
+    """
+    Joins words that were split across PDF lines with a hyphen.
+    E.g. 'be-\nhaviors' -> 'behaviors', 'multi-\ntarget' -> 'multi-target'.
+    Heuristic: if the part after the hyphen starts with a lowercase letter,
+    it's a broken word; if it starts with uppercase it might be a real hyphen.
+    """
+    # Pattern: word-<newline>lowercase continuation -> join without hyphen
+    text = re.sub(r'(\w)-\n([a-z])', r'\1\2', text)
+    # Pattern: word- <space> lowercase continuation (space inserted before us)
+    text = re.sub(r'(\w)-\s([a-z])', r'\1\2', text)
+    return text
+
 def extract_bibliography(pdf_path):
     """
     Extracts bibliography references from a PDF.
@@ -72,16 +85,16 @@ def extract_bibliography(pdf_path):
         # Split by lookahead for [n]
         refs = re.split(r'(?=\[\d+\])', full_ref_text)
         # Filter out empty or whitespace only strings
-        refs = [r.strip().replace('\n', ' ') for r in refs if r.strip()]
+        refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
         # Filter out the header if it got caught (usually handled by block logic, but good safety)
-        refs = [r for r in refs if len(r) > 10] 
+        refs = [r for r in refs if len(r) > 10]
         return refs
 
     # Strategy B: Numbered 1., 2.
     # Need to be careful not to split on "Vol. 1."
     if re.search(r'^\s*1\.\s+', full_ref_text, re.MULTILINE):
         refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\d+\.\s+)', full_ref_text)
-        refs = [r.strip().replace('\n', ' ') for r in refs if r.strip()]
+        refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
         return refs
 
@@ -92,7 +105,7 @@ def extract_bibliography(pdf_path):
     
     raw_refs = []
     for i in range(ref_start_index + 1, len(all_blocks)):
-         text = all_blocks[i][4].strip().replace('\n', ' ')
+         text = heal_hyphens(all_blocks[i][4].strip()).replace('\n', ' ')
          if len(text) > 20: # arbitrary filter for "real" ref
              raw_refs.append(text)
              
