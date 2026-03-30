@@ -65,10 +65,31 @@ def extract_bibliography(pdf_path):
     if ref_start_index == -1:
         return [] # Could not find bibliography section
 
-    # 3. Concatenate all text after the header
+    # 3. Concatenate text until the end of references or a termination header
     ref_content = []
+    termination_keywords = [
+        "appendix", "appendices", "supplementary material", "supplemental material",
+        "acknowledgment", "acknowledgments", "author contributions", "conflicts of interest",
+        "biography", "index", "glossary"
+    ]
+    
     for i in range(ref_start_index + 1, len(all_blocks)):
-        ref_content.append(all_blocks[i][4])
+        block_text = all_blocks[i][4].strip()
+        lower_text = block_text.lower()
+        
+        # Check if this block looks like a new header (potentially an appendix)
+        if len(lower_text.split()) < 5:
+            # Clean text check (similar to start detection)
+            clean_text = re.sub(r'[^a-z]', '', lower_text)
+            if any(k.replace(' ', '') == clean_text for k in termination_keywords):
+                print(f"  [DEBUG] Bibliography termination header found: '{block_text}'")
+                break
+            # Also catch things like "Appendix A", "Acknowledgment"
+            if any(k in lower_text for k in termination_keywords):
+                print(f"  [DEBUG] Potential termination header: '{block_text}'")
+                break
+
+        ref_content.append(block_text)
         
     full_ref_text = "\n".join(ref_content)
     
