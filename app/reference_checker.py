@@ -30,8 +30,9 @@ def extract_title_from_reference(ref_text):
     # Remove common reference number prefixes: [1], 1., etc.
     text = re.sub(r'^\s*\[?\d+\]?\.\?\s*', '', ref_text)
     
-    # Try to find text in quotes
-    quoted = re.search(r'[""]([^"""]+)[""]', text)
+    # Try to find text in quotes (standard, smart, or LaTeX-style)
+    # This matches '""', '""', '``', and "''" as quote markers
+    quoted = re.search(r'(?:"|“|``)(.*?)(?:"|”|\'\')', text)
     if quoted:
         return quoted.group(1).strip()
     
