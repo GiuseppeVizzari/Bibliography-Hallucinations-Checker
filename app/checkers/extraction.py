@@ -133,6 +133,9 @@ def _strip_venue_suffix(title: str) -> str:
     """
     # Strip " In: ..." suffix that follows a title (conference/book chapter style)
     cleaned = re.sub(r'\s+[Ii]n:\s+.*$', '', title, flags=re.DOTALL)
+    # Strip leading punctuation artifacts (e.g. ': ' from LNCS-style 'Author, I.: Title'
+    # where splitting on '.' leaves an orphan ': ' at the start of the title segment)
+    cleaned = re.sub(r'^[\s:;]+', '', cleaned)
     # Strip any trailing punctuation artifacts left after the cut
     return cleaned.rstrip('.,; ') or title  # fall back to original if result is empty
 
