@@ -28,3 +28,4 @@ app/uploads/
 
 # Pybliometrics cache
 .pybliometrics/
+debug.log
