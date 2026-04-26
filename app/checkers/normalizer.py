@@ -4,7 +4,15 @@ app/checkers/normalizer.py
 Text normalization utilities shared across the checker pipeline.
 """
 import re
+import unicodedata
 from difflib import SequenceMatcher
+
+
+def normalize_ligatures(text: str) -> str:
+    """Decomposes Unicode ligatures like 'ﬁ' into 'fi', 'ﬂ' into 'fl', etc."""
+    if not text:
+        return ""
+    return unicodedata.normalize('NFKD', text)
 
 
 def normalize_quotes(text: str) -> str:

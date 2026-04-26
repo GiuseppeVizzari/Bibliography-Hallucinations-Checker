@@ -31,13 +31,21 @@ def extract_bibliography(pdf_path):
     
     all_blocks = []
     for page in doc:
+        page_height = page.rect.height
+        margin = page_height * 0.10 # 10% margin for headers/footers
+        
         blocks = page.get_text("blocks")
         # clean blocks: remove blocks with no text or just whitespace
         cleaned_blocks = []
         for b in blocks:
             if b[6] == 0: # text block
-                text = b[4].strip()
-                if text:
+                # Filter out headers/footers based on y-coordinate
+                y0, y1 = b[1], b[3]
+                if y0 < margin or y1 > (page_height - margin):
+                    continue
+
+                block_text = b[4].strip()
+                if block_text:
                     cleaned_blocks.append(b)
         all_blocks.extend(cleaned_blocks)
 
@@ -48,16 +56,16 @@ def extract_bibliography(pdf_path):
     # We iterate through blocks to find the split point.
     
     ref_start_index = -1
-    keywords = ["references", "bibliography", "works cited"]
+    keywords = ["references", "bibliography", "works cited", "bibliografia", "riferimenti", "rererences"]
     
     for i, block in enumerate(all_blocks):
         text = block[4].strip().lower()
         # Check if the block is a header (short length, contains keyword)
-        if len(text.split()) < 5: 
+        if len(text.split()) < 10: 
             if any(k in text for k in keywords):
                 # Potential match. 
                 # Strict check: if it's just the word (plus maybe numbers/punctuation)
-                clean_text = re.sub(r'[^a-zA-Z]', '', text)
+                clean_text = re.sub(r'[^a-z]', '', text)
                 if any(k in clean_text for k in keywords):
                     ref_start_index = i
                     break 
@@ -68,9 +76,9 @@ def extract_bibliography(pdf_path):
     # 3. Concatenate text until the end of references or a termination header
     ref_content = []
     termination_keywords = [
-        "appendix", "appendices", "supplementary material", "supplemental material",
+        "appendix", "appendices", "annex", "supplementary material", "supplemental material",
         "acknowledgment", "acknowledgments", "author contributions", "conflicts of interest",
-        "biography", "index", "glossary"
+        "biography", "index", "glossary", "appendice", "appendici", "ringraziamenti"
     ]
     
     for i in range(ref_start_index + 1, len(all_blocks)):
@@ -78,15 +86,16 @@ def extract_bibliography(pdf_path):
         lower_text = block_text.lower()
         
         # Check if this block looks like a new header (potentially an appendix)
-        if len(lower_text.split()) < 5:
-            # Clean text check (similar to start detection)
+        if len(lower_text.split()) < 10:
+            # Clean text check (normalizes out numbers, extra punct)
             clean_text = re.sub(r'[^a-z]', '', lower_text)
             if any(k.replace(' ', '') == clean_text for k in termination_keywords):
                 print(f"  [DEBUG] Bibliography termination header found: '{block_text}'")
                 break
-            # Also catch things like "Appendix A", "Acknowledgment"
-            if any(k in lower_text for k in termination_keywords):
-                print(f"  [DEBUG] Potential termination header: '{block_text}'")
+            
+            # Anchor detection: Starts with Appendix/Annex...
+            if re.match(r'^(appendix|appendices|annex|acknowledgment|acknowledgments|supplement|appendice|appendici|ringraziamenti)\b', lower_text):
+                print(f"  [DEBUG] Anchored termination header found: '{block_text}'")
                 break
 
         ref_content.append(block_text)
@@ -102,9 +111,9 @@ def extract_bibliography(pdf_path):
     # We will try a few regex strategies.
     
     # Strategy A: Bracketed numbers [1], [2], etc.
-    if re.search(r'\[\d+\]', full_ref_text):
-        # Split by lookahead for [n]
-        refs = re.split(r'(?=\[\d+\])', full_ref_text)
+    if re.search(r'^\s*\[\d+\]', full_ref_text, re.MULTILINE):
+        # Split by lookahead for [n] at the start of a line
+        refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\[\d+\])', full_ref_text)
         # Filter out empty or whitespace only strings
         refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
         # Filter out the header if it got caught (usually handled by block logic, but good safety)

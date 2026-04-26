@@ -4,11 +4,12 @@ app/checkers/backends/openalex.py
 OpenAlex API backend — supports DOI lookup and full-text title search.
 """
 import os
+import re
 import pyalex
 from typing import Optional
 from pyalex import Works
 from dotenv import load_dotenv
-from ..normalizer import normalize_quotes
+from ..normalizer import normalize_quotes, normalize_ligatures
 
 load_dotenv()
 pyalex.config.email = os.getenv("OPENALEX_EMAIL", "your-email@example.com")
@@ -95,15 +96,29 @@ def lookup_by_doi(doi: str) -> dict:
 def lookup_by_title(title: str) -> dict:
     """Search OpenAlex by title string (full-text search)."""
     try:
-        print(f"  OpenAlex title search: {title[:70]}...")
-        # Normalize typographic quotes that can confuse the search API
+        # Normalize typographic quotes and ligatures
         clean = normalize_quotes(title)
-        results = Works().search(clean).get()
+        clean = normalize_ligatures(clean)
+        # Remove colons, semicolons, and common trailing punctuation for the search query
+        query = re.sub(r'[:;.,!?]', ' ', clean).strip()
+        
+        print(f"  OpenAlex title search: {query[:70]}...")
+        results = Works().search(query).get()
+        
+        if not results:
+            # Fallback: Search with only the first ~8 words (often more robust for long titles)
+            words = query.split()
+            if len(words) > 10:
+                short_query = " ".join(words[:8])
+                print(f"  → No results for full title. Trying fallback: {short_query}...")
+                results = Works().search(short_query).get()
+
         if results:
             res = _process_work(results[0])
             if res:
                 print(f"  ✓ Found in OpenAlex (title): {res['title'][:60]}...")
                 return res
+        
         print("  - Not found in OpenAlex by title")
         return {"status": "not_found"}
     except Exception as e:

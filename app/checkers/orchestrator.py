@@ -105,8 +105,12 @@ def check_reference(ref_text: str) -> dict:
 
     # Similarity scoring
     if result and result.get("status") == "found":
-        similarity = calculate_similarity(extracted_title, result.get("title", ""))
+        fetched_title = result.get("title", "")
+        similarity = calculate_similarity(extracted_title, fetched_title)
         result["similarity"] = similarity
-        print(f"  [DEBUG] Similarity score: {similarity:.2f}")
+        print(f"  [DEBUG] Similarity comparison:")
+        print(f"  [DEBUG]   Extracted title: '{extracted_title}'")
+        print(f"  [DEBUG]   Fetched title:   '{fetched_title}'")
+        print(f"  [DEBUG]   Score: {similarity:.2f}")
 
     return result
