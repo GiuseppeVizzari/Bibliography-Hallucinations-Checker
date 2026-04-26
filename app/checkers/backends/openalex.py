@@ -9,7 +9,7 @@ import pyalex
 from typing import Optional
 from pyalex import Works
 from dotenv import load_dotenv
-from ..normalizer import normalize_quotes, normalize_ligatures
+from ..normalizer import normalize_quotes, normalize_ligatures, calculate_similarity
 
 load_dotenv()
 pyalex.config.email = os.getenv("OPENALEX_EMAIL", "your-email@example.com")
@@ -116,7 +116,14 @@ def lookup_by_title(title: str) -> dict:
         if results:
             res = _process_work(results[0])
             if res:
-                print(f"  ✓ Found in OpenAlex (title): {res['title'][:60]}...")
+                # Pre-acceptance relevance gate: reject obviously wrong matches.
+                # OpenAlex always returns *something* even when the paper isn't indexed.
+                # If the returned title is too dissimilar from our query, treat as not found.
+                relevance = calculate_similarity(title, res['title'])
+                if relevance < 0.35:
+                    print(f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < 0.35): '{res['title'][:60]}'")
+                    return {"status": "not_found"}
+                print(f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}...")
                 return res
         
         print("  - Not found in OpenAlex by title")
