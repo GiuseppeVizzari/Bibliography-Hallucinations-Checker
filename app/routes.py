@@ -1,8 +1,9 @@
-import os
+import os, re
 from flask import Blueprint, render_template, request, flash, redirect, current_app
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
 from .reference_checker import check_reference
+from .checkers.extraction import extract_doi_info, extract_arxiv_id
 
 bp = Blueprint('main', __name__)
 
@@ -52,8 +53,26 @@ def index():
                 for i, ref in enumerate(refs, 1):
                     print(f"[{i}/{total_refs}]")
                     check_result = check_reference(ref)
+
+                    # Build best-effort link for the original reference
+                    original_url = None
+                    doi, _ = extract_doi_info(ref)
+                    if doi:
+                        # Strip trailing punctuation that may have been included
+                        doi_clean = doi.rstrip('.,;)]')
+                        original_url = f"https://doi.org/{doi_clean}"
+                    else:
+                        arxiv_id = extract_arxiv_id(ref)
+                        if arxiv_id:
+                            original_url = f"https://arxiv.org/abs/{arxiv_id}"
+                        else:
+                            url_match = re.search(r'https?://[^\s,)]+', ref)
+                            if url_match:
+                                original_url = url_match.group(0).rstrip('.,;)')
+
                     results.append({
                         "original": ref,
+                        "original_url": original_url,
                         "check": check_result,
                         "number": i
                     })

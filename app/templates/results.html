@@ -26,7 +26,18 @@
             {% for item in results %}
             <tr {% if item.check.status == 'found' and item.check.similarity < 0.6 %}class="table-warning"{% endif %}>
                 <td class="text-center"><strong>{{ item.number }}</strong></td>
-                <td class="small">{{ item.original }}</td>
+                <td class="small">
+                    {{ item.original }}
+                    {% if item.original_url %}
+                    <div class="mt-1">
+                        <a href="{{ item.original_url }}" target="_blank" rel="noopener noreferrer"
+                           class="badge bg-light text-secondary border text-decoration-none"
+                           style="font-size: 0.7rem;">
+                            🔗 Source
+                        </a>
+                    </div>
+                    {% endif %}
+                </td>
                 <td class="text-center">
                     {% if item.check.status == 'found' %}
                         {% if item.check.similarity >= 0.6 %}
@@ -61,12 +72,18 @@
                 </td>
                 <td class="small">
                     {% if item.check.status == 'found' %}
-                        <strong>{{ item.check.title }}</strong><br>
+                        {% if item.check.url and item.check.url != '#' %}
+                            <strong><a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer">{{ item.check.title }}</a></strong><br>
+                        {% else %}
+                            <strong>{{ item.check.title }}</strong><br>
+                        {% endif %}
                         <em>{{ item.check.author }}</em><br>
                         {{ item.check.venue }} ({{ item.check.pub_year }})<br>
                         <div class="d-flex justify-content-between align-items-center mt-1">
-                            {% if item.check.url != '#' %}
-                            <a href="{{ item.check.url }}" target="_blank">Link</a>
+                            {% if item.check.url and item.check.url != '#' %}
+                            <a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>
+                            {% else %}
+                            <span></span>
                             {% endif %}
                             <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}text-warning border-warning{% else %}text-danger border-danger{% endif %} small">
                                 Similarity: {{ (item.check.similarity * 100)|round|int }}%
@@ -90,4 +107,41 @@
         </tbody>
     </table>
 </div>
+
+{# ── Back to top button ── #}
+<a href="#" id="back-to-top"
+   title="Back to top"
+   style="
+       display: none;
+       position: fixed;
+       bottom: 2rem;
+       right: 2rem;
+       z-index: 1000;
+       width: 2.75rem;
+       height: 2.75rem;
+       border-radius: 50%;
+       background: #0d6efd;
+       color: #fff;
+       font-size: 1.25rem;
+       text-align: center;
+       line-height: 2.75rem;
+       text-decoration: none;
+       box-shadow: 0 2px 8px rgba(0,0,0,.25);
+       transition: opacity .2s;
+   ">↑</a>
+
+<script>
+    (function () {
+        const btn = document.getElementById('back-to-top');
+        window.addEventListener('scroll', function () {
+            btn.style.display = window.scrollY > 300 ? 'block' : 'none';
+        });
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    })();
+</script>
+
 {% endblock %}
+

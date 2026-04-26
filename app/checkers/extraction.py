@@ -52,14 +52,17 @@ def extract_title_from_reference(ref_text: str) -> str:
         if len(after_year) > 20:
             # Strip leading dots/commas
             after_year = re.sub(r'^[.,\s]+', '', after_year)
-            # Find the first segment (splitting by dot or common venue indicators)
-            # We split by ". " or common journal/volume patterns
-            title_candidate = re.split(r'\.\s+|,\s+[Vv]ol\.|,\s+[Pp][Pp]\.', after_year)[0]
+            # Split by ". ", common volume/page markers, AND conference venue markers
+            # e.g. "Title? In: Proceedings..." or "Title. In: Proceedings..."
+            title_candidate = re.split(
+                r'\.\s+|[?!]\s+[Ii]n:\s+|,\s+[Ii]n:\s+|\s+[Ii]n:\s+|,\s+[Vv]ol\.|,\s+[Pp][Pp]\.',
+                after_year
+            )[0]
             if len(title_candidate) > 20:
                 lower_cand = title_candidate.lower()
                 if not (lower_cand.startswith('doi') or lower_cand.startswith('url') or lower_cand.startswith('http') or lower_cand.startswith('arxiv')):
-                    if not re.match(r'^\s*(pp\.|pages?|\d+\s*[-–]\s*\d+)', lower_cand):
-                        return title_candidate.strip()
+                    if not re.match(r'^\s*(pp\.|pages?|\d+\s*[-\u2013]\s*\d+)', lower_cand):
+                        return _strip_venue_suffix(title_candidate.strip())
 
     # --- 4. Comma-delimited segment ---
     # Handle styles like "Author, Author AND Author, Title, Year" with no quotes
@@ -87,7 +90,7 @@ def extract_title_from_reference(ref_text: str) -> str:
             if len(segment) > 20:
                 words = set(re.findall(r'\b\w+\b', segment.lower()))
                 if words & common_words:
-                    return _strip_author_header(segment)
+                    return _strip_venue_suffix(_strip_author_header(segment))
 
     # --- 5. Content Heuristic (First sentence that isn't just authors) ---
     # We split by periods and look for a part that "looks like a title"
@@ -109,15 +112,29 @@ def extract_title_from_reference(ref_text: str) -> str:
         # If it's long and has common words, it's probably the title.
         words = set(re.findall(r'\b\w+\b', part.lower()))
         if words & common_words:
-            return _strip_author_header(part)
+            return _strip_venue_suffix(_strip_author_header(part))
             
     # Final fallback: take the longest reasonable part or the first 100 chars
     parts = [p.strip() for p in text.split('.') if len(p.strip()) > 10]
     if parts:
         best = sorted(parts, key=len, reverse=True)[0]
-        return _strip_author_header(best)
+        return _strip_venue_suffix(_strip_author_header(best))
     
-    return _strip_author_header(text[:100].strip())
+    return _strip_venue_suffix(_strip_author_header(text[:100].strip()))
+
+
+def _strip_venue_suffix(title: str) -> str:
+    """
+    Removes trailing venue/proceedings information from a title.
+
+    Handles patterns like:
+      'Is this a title? In: Proceedings of the AAAI...' → 'Is this a title?'
+      'Some title. In: Book Name...'                   → 'Some title.'
+    """
+    # Strip " In: ..." suffix that follows a title (conference/book chapter style)
+    cleaned = re.sub(r'\s+[Ii]n:\s+.*$', '', title, flags=re.DOTALL)
+    # Strip any trailing punctuation artifacts left after the cut
+    return cleaned.rstrip('.,; ') or title  # fall back to original if result is empty
 
 
 def _strip_author_header(text: str) -> str:

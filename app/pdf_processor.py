@@ -14,6 +14,20 @@ def heal_hyphens(text):
     text = re.sub(r'(\w)-\s([a-z])', r'\1\2', text)
     return text
 
+
+def _is_numeric_table_row(text: str) -> bool:
+    """
+    Returns True if the block looks like a numeric table row rather than a
+    bibliographic reference.  Heuristic: if more than 60% of the whitespace-
+    separated tokens are numeric (integers, floats, ±values), it's table data.
+    """
+    tokens = text.split()
+    if len(tokens) < 4:
+        return False
+    numeric_pat = re.compile(r'^[\+\-±]?\d+([.,]\d+)?([eE][\+\-]?\d+)?$')
+    numeric_count = sum(1 for t in tokens if numeric_pat.match(t.strip('.,;:')))
+    return (numeric_count / len(tokens)) > 0.60
+
 def extract_bibliography(pdf_path):
     """
     Extracts bibliography references from a PDF.
@@ -68,10 +82,12 @@ def extract_bibliography(pdf_path):
                 clean_text = re.sub(r'[^a-z]', '', text)
                 if any(k in clean_text for k in keywords):
                     ref_start_index = i
+                    print(f"  [DEBUG] Bibliography section found at block {i}: '{block[4].strip()[:60]}'")
                     break 
     
     if ref_start_index == -1:
-        return [] # Could not find bibliography section
+        print("  [DEBUG] Could not find bibliography section header in any block.")
+        return []
 
     # 3. Concatenate text until the end of references or a termination header
     ref_content = []
@@ -81,24 +97,46 @@ def extract_bibliography(pdf_path):
         "biography", "index", "glossary", "appendice", "appendici", "ringraziamenti"
     ]
     
+    print(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
     for i in range(ref_start_index + 1, len(all_blocks)):
         block_text = all_blocks[i][4].strip()
         lower_text = block_text.lower()
-        
-        # Check if this block looks like a new header (potentially an appendix)
+        first_line = block_text.splitlines()[0][:80] if block_text else ''
+
+        # Check if this block looks like a termination header (appendix, acknowledgements, etc.)
+        # NOTE: we check ALL blocks regardless of length — appendix headings can be long.
+
+        # Anchor detection: block starts with one of the termination words
+        if re.match(r'^(appendix|appendices|annex|acknowledgment|acknowledgments|supplement|appendice|appendici|ringraziamenti)\b', lower_text):
+            print(f"  [DEBUG] STOP (anchor match): '{first_line}'")
+            break
+
+        # Appendix letter-section heading: "Appendix A", "A.1 ...", etc.
+        if re.match(r'^appendix\s+[a-z0-9]', lower_text):
+            print(f"  [DEBUG] STOP (appendix letter): '{first_line}'")
+            break
+
+        # Appendix table / figure caption: "Table A1", "Fig. A2", "Figure A3"
+        if re.match(r'^(table|fig\.?|figure)\s+[a-z]\d*\b', lower_text):
+            print(f"  [DEBUG] STOP (appendix table/figure): '{first_line}'")
+            break
+
+        # Exact-match check for short blocks (normalises out numbers/punct)
         if len(lower_text.split()) < 10:
-            # Clean text check (normalizes out numbers, extra punct)
             clean_text = re.sub(r'[^a-z]', '', lower_text)
             if any(k.replace(' ', '') == clean_text for k in termination_keywords):
-                print(f"  [DEBUG] Bibliography termination header found: '{block_text}'")
-                break
-            
-            # Anchor detection: Starts with Appendix/Annex...
-            if re.match(r'^(appendix|appendices|annex|acknowledgment|acknowledgments|supplement|appendice|appendici|ringraziamenti)\b', lower_text):
-                print(f"  [DEBUG] Anchored termination header found: '{block_text}'")
+                print(f"  [DEBUG] STOP (exact match): '{first_line}'")
                 break
 
+        # Skip blocks that look like pure numeric table rows (appendix data)
+        if _is_numeric_table_row(block_text):
+            print(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
+            continue
+
+        print(f"  [DEBUG]   INCLUDE block {i} ({len(lower_text.split())} words): '{first_line}'")
         ref_content.append(block_text)
+
+    print(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
         
     full_ref_text = "\n".join(ref_content)
     
@@ -128,15 +166,13 @@ def extract_bibliography(pdf_path):
         refs = [r for r in refs if len(r) > 10]
         return refs
 
-    # Strategy C: Fallback - split by single newlines that look like new entries? 
-    # Or just return blocks if they look like individual refs?
-    # Many PDFs utilize one block per paragraph/ref.
-    # Let's try to return blocks from the ref section if they are long enough.
-    
+    # Strategy C: Fallback — use ref_content which has already had the termination
+    # boundary applied (appendix, acknowledgements, etc. are excluded).
+    # Many PDFs use one block per paragraph/reference.
     raw_refs = []
-    for i in range(ref_start_index + 1, len(all_blocks)):
-         text = heal_hyphens(all_blocks[i][4].strip()).replace('\n', ' ')
-         if len(text) > 20: # arbitrary filter for "real" ref
-             raw_refs.append(text)
-             
+    for block_text in ref_content:
+        text = heal_hyphens(block_text).replace('\n', ' ')
+        if len(text) > 20:  # arbitrary filter for "real" ref
+            raw_refs.append(text)
+
     return raw_refs
