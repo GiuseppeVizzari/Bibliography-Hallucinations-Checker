@@ -18,7 +18,7 @@ from .extraction import (
     heal_doi,
     extract_arxiv_id,
 )
-from .normalizer import calculate_similarity
+from .normalizer import calculate_similarity, strip_doi_punctuation
 from .backends import openalex, crossref, datacite, arxiv as arxiv_backend, url_checker
 
 
@@ -72,42 +72,51 @@ def check_reference(ref_text: str) -> dict:
     print(f"\n[DEBUG] Checking reference...")
     print(f"  Original: {ref_text[:100]}...")
 
-    # Pre-extract title for similarity scoring at the end
-    extracted_title = extract_title_from_reference(ref_text)
+    try:
+        extracted_title = extract_title_from_reference(ref_text)
+    except Exception as e:
+        print(f"  - Title extraction failed: {e}")
+        extracted_title = ""
 
     result = None
 
-    # --- Step 1: DOI lookup ---
-    doi, end_pos = extract_doi_info(ref_text)
-    if doi:
-        print(f"  → Found DOI: {doi}")
-        result = _run_doi_search_cycle(doi)
+    try:
+        # --- Step 1: DOI lookup ---
+        doi, end_pos = extract_doi_info(ref_text)
+        if doi:
+            doi_clean = strip_doi_punctuation(doi)
+            print(f"  → Found DOI: {doi_clean}")
+            result = _run_doi_search_cycle(doi_clean)
 
-        # --- Step 2: DOI healing ---
+            # --- Step 2: DOI healing ---
+            if not result or result["status"] != "found":
+                print("  → DOI not found. Attempting to heal/expand...")
+                healed_doi, _ = heal_doi(doi_clean, end_pos, ref_text)
+                if healed_doi:
+                    result = _run_doi_search_cycle(healed_doi)
+
+        # --- Step 3: arXiv ---
         if not result or result["status"] != "found":
-            print("  → DOI not found. Attempting to heal/expand...")
-            healed_doi, _ = heal_doi(doi, end_pos, ref_text)
-            if healed_doi:
-                result = _run_doi_search_cycle(healed_doi)
+            arxiv_id = extract_arxiv_id(ref_text)
+            if arxiv_id:
+                print(f"  → Found arXiv ID: {arxiv_id}")
+                result = arxiv_backend.lookup_by_id(arxiv_id)
 
-    # --- Step 3: arXiv ---
-    if not result or result["status"] != "found":
-        arxiv_id = extract_arxiv_id(ref_text)
-        if arxiv_id:
-            print(f"  → Found arXiv ID: {arxiv_id}")
-            result = arxiv_backend.lookup_by_id(arxiv_id)
+        # --- Step 4: Title search ---
+        if not result or result["status"] != "found":
+            print(f"  Extracted title: {extracted_title[:80]}...")
+            print("  → Falling back to title search...")
+            result = openalex.lookup_by_title(extracted_title)
 
-    # --- Step 4: Title search ---
-    if not result or result["status"] != "found":
-        print(f"  Extracted title: {extracted_title[:80]}...")
-        print("  → Falling back to title search...")
-        result = openalex.lookup_by_title(extracted_title)
+        # --- Step 5: URL checker ---
+        if not result or result["status"] != "found":
+            url = url_checker.extract_url(ref_text)
+            if url:
+                result = url_checker.lookup_by_url(url, extracted_title)
 
-    # --- Step 5: URL checker ---
-    if not result or result["status"] != "found":
-        url = url_checker.extract_url(ref_text)
-        if url:
-            result = url_checker.lookup_by_url(url, extracted_title)
+    except Exception as e:
+        print(f"  - Unexpected error in verification pipeline: {e}")
+        return {"status": "error", "message": str(e)}
 
     # Similarity scoring
     if result and result.get("status") == "found":

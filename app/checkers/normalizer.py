@@ -37,6 +37,64 @@ def normalize_text(text: str) -> str:
     return clean.lower().strip()
 
 
+def heal_hyphens(text: str) -> str:
+    """
+    Joins words that were split across PDF lines with a hyphen.
+    E.g. 'be-\\nhaviors' -> 'behaviors', 'multi-\\ntarget' -> 'multi-target'.
+
+    Heuristic: if the part after the hyphen starts with a lowercase letter,
+    it is a broken word; uppercase continuation suggests a real hyphen.
+    """
+    text = re.sub(r'(\w)-\n([a-z])', r'\1\2', text)
+    text = re.sub(r'(\w)-\s([a-z])', r'\1\2', text)
+    return text
+
+
+def strip_venue_suffix(title: str) -> str:
+    """
+    Removes trailing venue/proceedings information from a title.
+    """
+    cleaned = re.sub(r'\s+[Ii]n:\s+.*$', '', title, flags=re.DOTALL)
+    cleaned = re.sub(r'^[\s:;]+', '', cleaned)
+    return cleaned.rstrip('.,; ') or title
+
+
+def strip_author_header(text: str, common_title_words: set) -> str:
+    """
+    Cleans up a title that might still have a leftover author name at the start.
+    E.g. 'Zhang, Crowd evacuation...' -> 'Crowd evacuation...'
+    """
+    if ':' in text:
+        match = re.search(r'^[^:]{1,100}:\s*', text)
+        if match:
+            header = match.group(0).lower()
+            words = {w for w in re.findall(r'\b\w+\b', header) if len(w) > 1}
+            if not (words & common_title_words):
+                text = text[match.end():].strip()
+
+    while ',' in text:
+        split_point = text.find(',')
+        header = text[:split_point].strip()
+        tail = text[split_point + 1:].strip()
+
+        if len(header) < 15 and len(tail) > 10:
+            words = {w for w in re.findall(r'\b\w+\b', header.lower()) if len(w) > 1}
+            if not (words & common_title_words):
+                text = tail
+                continue
+        break
+
+    return text
+
+
+RELEVANCE_THRESHOLD = 0.35
+
+
+def strip_doi_punctuation(doi: str) -> str:
+    """Removes trailing punctuation that may have been captured alongside a DOI."""
+    return doi.rstrip('.,;)]')
+
+
 def calculate_similarity(text1: str, text2: str) -> float:
     """
     Computes a [0, 1] similarity score between two strings using
@@ -48,7 +106,6 @@ def calculate_similarity(text1: str, text2: str) -> float:
     s1 = normalize_text(text1)
     s2 = normalize_text(text2)
 
-    # Fall back to raw lowercase if normalization empties a string
     if not s1 or not s2:
         s1 = text1.lower().strip()
         s2 = text2.lower().strip()

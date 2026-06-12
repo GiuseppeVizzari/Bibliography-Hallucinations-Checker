@@ -10,7 +10,7 @@ import requests
 import urllib3
 import fitz  # PyMuPDF
 from typing import Optional
-from ..normalizer import calculate_similarity
+from ..normalizer import calculate_similarity, RELEVANCE_THRESHOLD
 
 # Disable SSL warning for verify=False requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -128,8 +128,8 @@ def lookup_by_url(url: str, reference_title: str) -> dict:
             
         # Relevance check
         similarity = calculate_similarity(reference_title, title)
-        if similarity < 0.35:
-            print(f"  - URL check: top result rejected (similarity {similarity:.2f} < 0.35): '{title[:60]}'")
+        if similarity < RELEVANCE_THRESHOLD:
+            print(f"  - URL check: top result rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}): '{title[:60]}'")
             return {"status": "not_found"}
             
         print(f"  ✓ Found URL resource (similarity {similarity:.2f}): {title[:60]}...")

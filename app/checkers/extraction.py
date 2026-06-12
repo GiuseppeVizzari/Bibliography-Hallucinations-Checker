@@ -4,19 +4,16 @@ app/checkers/extraction.py
 Helpers to extract structured identifiers and titles from raw reference strings.
 """
 import re
-from .normalizer import normalize_ligatures
+from .normalizer import normalize_ligatures, strip_venue_suffix, strip_author_header
 
 
 COMMON_TITLE_WORDS = {
-    'the', 'a', 'an', 'and', 'for', 'in', 'on', 'with', 'to', 'of', 'at', 'by', 
-    'from', 'using', 'study', 'survey', 'review', 'systematic', 'mapping',
-    'social', 'behavior', 'learning', 'detection', 'group', 'crowd', 'path',
-    'planning', 'approach', 'evacuation', 'building', 'based', 'improved',
-    'traffic', 'model', 'simulation', 'dynamics', 'analysis', 'results',
-    'experimental', 'theoretical', 'framework', 'optimization', 'transport',
-    'pedestrian', 'movement', 'velocity', 'flow', 'density', 'capacity',
-    'method', 'algorithm', 'evaluation', 'theory', 'human', 'versus',
-    'influence', 'impact', 'performance', 'design', 'structure', 'system'
+    'the', 'a', 'an', 'and', 'for', 'in', 'on', 'with', 'to', 'of', 'at', 'by',
+    'from', 'using', 'study', 'survey', 'review', 'analysis', 'framework',
+    'model', 'method', 'approach', 'system', 'design', 'evaluation',
+    'results', 'simulation', 'experimental', 'performance',
+    'impact', 'influence', 'theory', 'detection', 'learning', 'optimization',
+    'improved', 'based', 'between', 'towards', 'through', 'across'
 }
 
 
@@ -66,7 +63,7 @@ def extract_title_from_reference(ref_text: str) -> str:
                 lower_cand = title_candidate.lower()
                 if not (lower_cand.startswith('doi') or lower_cand.startswith('url') or lower_cand.startswith('http') or lower_cand.startswith('arxiv')):
                     if not re.match(r'^\s*(pp\.|pages?|\d+\s*[-\u2013]\s*\d+)', lower_cand):
-                        return _strip_venue_suffix(title_candidate.strip())
+                        return strip_venue_suffix(title_candidate.strip())
 
     # --- 5. Content Heuristic (First sentence that isn't just authors) ---
     # We split by periods and look for a part that "looks like a title"
@@ -91,7 +88,7 @@ def extract_title_from_reference(ref_text: str) -> str:
         # If it's long and has common words, it's probably the title.
         words = set(re.findall(r'\b\w+\b', part.lower()))
         if words & COMMON_TITLE_WORDS:
-            return _strip_venue_suffix(_strip_author_header(part))
+            return strip_venue_suffix(strip_author_header(part, COMMON_TITLE_WORDS))
 
     # --- 6. Comma-delimited segment ---
     # Handle styles like "Author, Author AND Author, Title, Year" with no quotes
@@ -119,63 +116,15 @@ def extract_title_from_reference(ref_text: str) -> str:
             if len(segment) > 20:
                 words = set(re.findall(r'\b\w+\b', segment.lower()))
                 if words & COMMON_TITLE_WORDS:
-                    return _strip_venue_suffix(_strip_author_header(segment))
+                    return strip_venue_suffix(strip_author_header(segment, COMMON_TITLE_WORDS))
             
     # Final fallback: take the longest reasonable part or the first 100 chars
     fallback_parts = [p.strip() for p in re.split(r'\.\s+', text) if len(p.strip()) > 10]
     if fallback_parts:
         best = sorted(fallback_parts, key=len, reverse=True)[0]
-        return _strip_venue_suffix(_strip_author_header(best))
+        return strip_venue_suffix(strip_author_header(best, COMMON_TITLE_WORDS))
     
-    return _strip_venue_suffix(_strip_author_header(text[:100].strip()))
-
-
-def _strip_venue_suffix(title: str) -> str:
-    """
-    Removes trailing venue/proceedings information from a title.
-    """
-    # Strip " In: ..." suffix that follows a title (conference/book chapter style)
-    cleaned = re.sub(r'\s+[Ii]n:\s+.*$', '', title, flags=re.DOTALL)
-    # Strip leading punctuation artifacts (e.g. ': ' from LNCS-style 'Author, I.: Title')
-    cleaned = re.sub(r'^[\s:;]+', '', cleaned)
-    # Strip any trailing punctuation artifacts left after the cut
-    return cleaned.rstrip('.,; ') or title  # fall back to original if result is empty
-
-
-def _strip_author_header(text: str) -> str:
-    """
-    Cleans up a title that might still have a leftover author name at the start.
-    E.g. 'Zhang, Crowd evacuation...' -> 'Crowd evacuation...'
-    """
-    # 1. Handle colon-separated authors like in LNCS: "Kim, D.: Title"
-    if ':' in text:
-        # Check if there is a colon after what looks like an initial or short name
-        # We allow up to 100 chars for long author lists
-        match = re.search(r'^[^:]{1,100}:\s*', text)
-        if match:
-            header = match.group(0).lower()
-            # If the header doesn't contain common title words, it's likely an author
-            # Ignore single-letter words (like initials) to prevent false matches (e.g. 'A.' matching 'a')
-            words = {w for w in re.findall(r'\b\w+\b', header) if len(w) > 1}
-            if not (words & COMMON_TITLE_WORDS):
-                text = text[match.end():].strip()
-
-    # 2. Strip comma-separated names at the start (e.g. "Vizzari, G., Title")
-    # We use a loop to catch multiple author segments
-    while ',' in text:
-        split_point = text.find(',')
-        header = text[:split_point].strip()
-        tail = text[split_point+1:].strip()
-        
-        # If the header is short and doesn't contain common title words, it's a name
-        if len(header) < 15 and len(tail) > 10:
-             words = {w for w in re.findall(r'\b\w+\b', header.lower()) if len(w) > 1}
-             if not (words & COMMON_TITLE_WORDS):
-                text = tail
-                continue
-        break
-             
-    return text
+    return strip_venue_suffix(strip_author_header(text[:100].strip(), COMMON_TITLE_WORDS))
 
 
 def extract_doi_info(ref_text: str):

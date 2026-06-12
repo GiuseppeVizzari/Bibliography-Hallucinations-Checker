@@ -2,8 +2,9 @@ import os, re, traceback
 from flask import Blueprint, render_template, request, flash, redirect, current_app
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
-from .reference_checker import check_reference
+from .checkers import check_reference
 from .checkers.extraction import extract_doi_info, extract_arxiv_id
+from .checkers.normalizer import strip_doi_punctuation
 
 bp = Blueprint('main', __name__)
 
@@ -41,7 +42,6 @@ def index():
                     flash('No references found or bibliography section not detected.')
                     return redirect(request.url)
                 
-                # Process all references (no batching needed with Semantic Scholar)
                 import time
                 results = []
                 total_refs = len(refs)
@@ -58,8 +58,7 @@ def index():
                     original_url = None
                     doi, _ = extract_doi_info(ref)
                     if doi:
-                        # Strip trailing punctuation that may have been included
-                        doi_clean = doi.rstrip('.,;)]')
+                        doi_clean = strip_doi_punctuation(doi)
                         original_url = f"https://doi.org/{doi_clean}"
                     else:
                         arxiv_id = extract_arxiv_id(ref)

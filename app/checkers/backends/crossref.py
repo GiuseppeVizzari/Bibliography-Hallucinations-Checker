@@ -4,6 +4,7 @@ app/checkers/backends/crossref.py
 Crossref API backend — DOI lookup via habanero.
 """
 from habanero import Crossref
+from ..normalizer import strip_doi_punctuation
 
 _cr = Crossref()
 
@@ -11,7 +12,7 @@ _cr = Crossref()
 def lookup_by_doi(doi: str) -> dict:
     """Fetch a work from Crossref by its DOI."""
     try:
-        doi_query = doi.rstrip('.,;)]')
+        doi_query = strip_doi_punctuation(doi)
         print(f"  Crossref DOI lookup: {doi_query}...")
         res = _cr.works(ids=doi_query)
 

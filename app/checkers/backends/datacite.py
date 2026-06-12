@@ -4,6 +4,7 @@ app/checkers/backends/datacite.py
 DataCite API backend — DOI lookup via REST API.
 """
 import requests
+from ..normalizer import strip_doi_punctuation
 
 
 _API_BASE = "https://api.datacite.org/dois"
@@ -12,7 +13,7 @@ _API_BASE = "https://api.datacite.org/dois"
 def lookup_by_doi(doi: str) -> dict:
     """Fetch a work from DataCite by its DOI."""
     try:
-        doi_query = doi.rstrip('.,;)]')
+        doi_query = strip_doi_punctuation(doi)
         print(f"  DataCite DOI lookup: {doi_query}...")
         response = requests.get(f"{_API_BASE}/{doi_query}", timeout=10)
 

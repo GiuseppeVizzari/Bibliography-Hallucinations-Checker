@@ -1,18 +1,6 @@
 import fitz  # PyMuPDF
 import re
-
-def heal_hyphens(text):
-    """
-    Joins words that were split across PDF lines with a hyphen.
-    E.g. 'be-\nhaviors' -> 'behaviors', 'multi-\ntarget' -> 'multi-target'.
-    Heuristic: if the part after the hyphen starts with a lowercase letter,
-    it's a broken word; if it starts with uppercase it might be a real hyphen.
-    """
-    # Pattern: word-<newline>lowercase continuation -> join without hyphen
-    text = re.sub(r'(\w)-\n([a-z])', r'\1\2', text)
-    # Pattern: word- <space> lowercase continuation (space inserted before us)
-    text = re.sub(r'(\w)-\s([a-z])', r'\1\2', text)
-    return text
+from .checkers.normalizer import heal_hyphens
 
 
 def _is_numeric_table_row(text: str) -> bool:

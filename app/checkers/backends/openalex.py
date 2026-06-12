@@ -9,10 +9,13 @@ import pyalex
 from typing import Optional
 from pyalex import Works
 from dotenv import load_dotenv
-from ..normalizer import normalize_quotes, normalize_ligatures, calculate_similarity
+from ..normalizer import (
+    normalize_quotes, normalize_ligatures, calculate_similarity,
+    strip_doi_punctuation, RELEVANCE_THRESHOLD,
+)
 
 load_dotenv()
-pyalex.config.email = os.getenv("OPENALEX_EMAIL", "your-email@example.com")
+pyalex.config.email = os.getenv("OPENALEX_EMAIL")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +79,7 @@ def _process_work(work: dict) -> Optional[dict]:
 def lookup_by_doi(doi: str) -> dict:
     """Fetch a work from OpenAlex by its DOI."""
     try:
-        doi_query = doi.rstrip('.,;)]')
+        doi_query = strip_doi_punctuation(doi)
         print(f"  OpenAlex DOI lookup: {doi_query}...")
         work = Works()[doi_query]
         if work:
@@ -120,8 +123,8 @@ def lookup_by_title(title: str) -> dict:
                 # OpenAlex always returns *something* even when the paper isn't indexed.
                 # If the returned title is too dissimilar from our query, treat as not found.
                 relevance = calculate_similarity(title, res['title'])
-                if relevance < 0.35:
-                    print(f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < 0.35): '{res['title'][:60]}'")
+                if relevance < RELEVANCE_THRESHOLD:
+                    print(f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < {RELEVANCE_THRESHOLD}): '{res['title'][:60]}'")
                     return {"status": "not_found"}
                 print(f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}...")
                 return res
