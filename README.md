@@ -48,21 +48,30 @@ The app parses the PDF via PyMuPDF, extracting text blocks with layout preservat
 
 After the bibliography header, common termination keywords act as hard stop points: `Appendix`, `Annex`, `Acknowledgments`, `Biography`, `Credit Author Statement`, `Generative AI`, `Supplementary Material`, Italian equivalents (`Appendice`, `Ringraziamenti`), and others (~30 terms). Appendix table/figure captions (`Table A1`, `Fig. A2`) and pure numeric table rows (>60% numeric tokens) are filtered out to prevent false positives.
 
-### 3. Reference Splitting
+### 3. Line Number Filtering
+
+Many PDFs include marginal or embedded line numbers (common in draft submissions and camera-ready templates). A three-layer filter removes them:
+
+- **Layer 1 — Marginal block detection**: Narrow, purely numeric blocks positioned in the left/right margin (x < 50pt or x > page_width − 50pt) are discarded during block extraction.
+- **Layer 2 — Embedded line number stripping**: Standalone 1–4 digit lines within a text block (e.g. line numbers interleaved between reference lines) are removed from the joined text before splitting.
+- **Layer 3 — Per-reference cleanup**: Each extracted reference is individually scrubbed of trailing standalone numbers.
+
+### 4. Reference Splitting
 
 The app auto-detects the citation style:
 
 - **Bracketed numbers** – `[1]`, `[2]`, ... (IEEE / Vancouver)
 - **Plain numbers** – `1.`, `2.`, ... (numbered lists)
-- **Block-based** – one block per reference, used by APA, Chicago, and similar author–date styles
+- **Author-year** – `[Author, Year]`, `[Author et al., Year]` (APA, some LaTeX templates)
+- **Block-based** – one block per reference, used by Chicago and similar author–date styles
 
 Hyphenated words broken across PDF lines (e.g. `be-\nhaviors`) are automatically rejoined.
 
-### 4. Identifier Extraction
+### 5. Identifier Extraction
 
 DOIs, arXiv IDs, and bare URLs are extracted from each reference. A multi-strategy **title extraction** cascade (7 strategies) handles quoted titles, author-year punctuation (APA/Chicago), comma-delimited styles, and colon-separated LNCS/Springer formats, while rejecting false positives such as page-number ranges or DOI strings.
 
-### 5. Five-Step Verification Pipeline
+### 6. Five-Step Verification Pipeline
 
 Each reference is checked in priority order:
 
@@ -74,7 +83,7 @@ Each reference is checked in priority order:
 | 4 | Title search | OpenAlex | Full-text search with a 0.35 relevance gate — results below the threshold are discarded |
 | 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
 
-### 6. Similarity Scoring
+### 7. Similarity Scoring
 
 Every successfully matched result is compared against the extracted reference title using `difflib.SequenceMatcher`. The score determines the visual badge in the UI.
 
@@ -85,7 +94,6 @@ app/
 ├── __init__.py                   # Flask app factory (16 MB upload limit, 413 error handler)
 ├── routes.py                     # Upload route + processing loop
 ├── pdf_processor.py              # PDF parsing, bibliography detection, reference splitting
-├── reference_checker.py          # Backward-compatibility shim
 │
 └── checkers/
     ├── __init__.py               # Exports check_reference
@@ -107,6 +115,7 @@ app/
 - ✅ **Multi-language Bibliography Headers**: Supports English and Italian section titles, plus common OCR/typo variants.
 - ✅ **Appendix Termination**: Automatically stops collecting references at ~30 termination keywords, including lettered appendix tables and numeric table rows.
 - ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
+- ✅ **Line Number Filtering**: Three-layer filter removes marginal and embedded line numbers that would otherwise corrupt reference text.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
 - ✅ **Five-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, and direct URL resource fetching.
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.

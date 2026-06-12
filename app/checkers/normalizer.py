@@ -70,7 +70,14 @@ def strip_author_header(text: str, common_title_words: set) -> str:
             header = match.group(0).lower()
             words = {w for w in re.findall(r'\b\w+\b', header) if len(w) > 1}
             if not (words & common_title_words):
-                text = text[match.end():].strip()
+                header_full = match.group(0)
+                header_words = re.findall(r'\b\w+\b', header_full)
+                if len(header_words) <= 2:
+                    should_strip = True
+                    if len(header_words) == 1 and len(header_words[0]) > 4 and '.' not in header_words[0]:
+                        should_strip = False
+                    if should_strip:
+                        text = text[match.end():].strip()
 
     while ',' in text:
         split_point = text.find(',')
@@ -78,6 +85,8 @@ def strip_author_header(text: str, common_title_words: set) -> str:
         tail = text[split_point + 1:].strip()
 
         if len(header) < 15 and len(tail) > 10:
+            if re.search(r'\d', header):
+                break
             words = {w for w in re.findall(r'\b\w+\b', header.lower()) if len(w) > 1}
             if not (words & common_title_words):
                 text = tail

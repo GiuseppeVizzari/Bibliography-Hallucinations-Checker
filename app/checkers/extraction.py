@@ -16,6 +16,106 @@ COMMON_TITLE_WORDS = {
     'improved', 'based', 'between', 'towards', 'through', 'across'
 }
 
+# Compiled regexes for cleanup
+_DOI_URL_RE = re.compile(r'https?://(?:dx\.)?doi\.org/[-._;()/:a-zA-Z0-9]+')
+_BARE_DOI_RE = re.compile(r'\b10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+\b')
+_URL_RE = re.compile(r'https?://\S+|//[a-zA-Z][-./\w]*')
+_ARXIV_URL_RE = re.compile(r'https?://arxiv\.org/\S+')
+_VENUE_YEAR_RE = re.compile(r'\b(?:19|20)\d{2}\b')
+
+
+def _is_numeric_garbage(candidate: str) -> bool:
+    """Returns True if the candidate is mostly numeric — a page number, not a title."""
+    stripped = candidate.lstrip()
+    if not stripped:
+        return True
+    # Count alphanumeric tokens; if > 50% are purely digits, reject
+    tokens = re.findall(r'[A-Za-z0-9]+', stripped)
+    if not tokens:
+        return True
+    digit_count = sum(1 for t in tokens if t.isdigit())
+    return (digit_count / len(tokens)) > 0.50
+
+
+def _is_author_list(part: str) -> bool:
+    """Returns True if a segment looks like a list of author names, not a title."""
+    if part.count(',') < 2:
+        return False
+    if ':' in part or 'et al' in part.lower():
+        return False
+    words = re.findall(r'\b[A-Za-z]+\b', part)
+    if len(words) < 4:
+        return False
+    common = {w.lower() for w in words if w.lower() in COMMON_TITLE_WORDS}
+    connecting = {'and', 'in', 'of', 'for', 'with', 'on', 'to', 'by', 'at'}
+    if common - connecting:
+        return False
+    non_common = [w for w in words if w.lower() not in COMMON_TITLE_WORDS and len(w) > 1]
+    if len(non_common) < 3:
+        return False
+    short_caps = sum(1 for w in non_common if w[0].isupper() and len(w) < 15)
+    return (short_caps / len(non_common)) > 0.70
+
+
+def _strip_trailing_venue(title: str) -> str:
+    """Removes trailing venue/journal info after commas, iterating right-to-left."""
+    result = title
+    while True:
+        last_comma = result.rfind(',')
+        if last_comma == -1:
+            return result
+        after = result[last_comma + 1:].strip()
+        if not after:
+            result = result[:last_comma].strip()
+            continue
+        after_words = re.findall(r'\b[A-Za-z]+\b', after)
+        # Rule 1: trailing text contains a year → strip
+        if _VENUE_YEAR_RE.search(after):
+            before = result[:last_comma].strip()
+            if before:
+                result = before
+                continue
+            return result
+        # Rule 2: 1 short capitalized word, no common title words → venue abbrev
+        if len(after_words) == 1 and len(after_words[0]) < 12:
+            lower = after.lower()
+            has_common = any(
+                len(w) > 1 and w in COMMON_TITLE_WORDS
+                for w in re.findall(r'\b\w+\b', lower)
+            )
+            if not has_common and after_words[0][0].isupper():
+                before = result[:last_comma].strip()
+                if before:
+                    result = before
+                    continue
+                return result
+        # Rule 3: 2-3 short capitalized words, no common title words → venue abbrev
+        if 2 <= len(after_words) <= 3:
+            lower = after.lower()
+            has_common = any(
+                len(w) > 1 and w in COMMON_TITLE_WORDS
+                for w in re.findall(r'\b\w+\b', lower)
+            )
+            if not has_common:
+                all_upper = all(w and w[0].isupper() for w in after_words)
+                all_short = all(len(w) < 12 for w in after_words)
+                if all_upper and all_short:
+                    before = result[:last_comma].strip()
+                    if before:
+                        result = before
+                        continue
+                    return result
+        break
+    return result
+
+
+def _clean_title(candidate: str) -> str:
+    """Applies author-stripping, venue-stripping, and URL-stripping."""
+    cleaned = strip_author_header(candidate, COMMON_TITLE_WORDS)
+    cleaned = strip_venue_suffix(cleaned)
+    cleaned = _strip_trailing_venue(cleaned)
+    return _strip_trailing_url(cleaned)
+
 
 def extract_title_from_reference(ref_text: str) -> str:
     """
@@ -23,108 +123,127 @@ def extract_title_from_reference(ref_text: str) -> str:
 
     Strategy (in order):
     1. Normalize Unicode ligatures (e.g. 'ﬁ' -> 'fi').
-    2. Strip bracketed citation keys or simple numbered brackets.
-    3. Text enclosed in quotes.
-    4. Author-Year Punctuation Heuristic.
-    5. Content Heuristic (First sentence that isn't just authors, splitting by dots).
-    6. Comma-delimited segment.
-    7. Fallback search for the longest substantive segment.
+    2. Strip DOI URLs and bare DOIs that confuse extraction.
+    3. Strip bracketed citation keys or simple numbered brackets.
+    4. Text enclosed in quotes.
+    5. Author-Year Punctuation Heuristic (with numeric garbage guard).
+    6. Content Heuristic (first sentence that isn't just authors, splitting by dots).
+    7. Comma-delimited segment.
+    8. Fallback search for the longest substantive segment.
     """
     # --- 1. Normalize ---
     ref_text = normalize_ligatures(ref_text)
 
-    # --- 2. Cleanup ---
+    # --- 2. Strip DOI URLs and bare DOIs ---
+    # These often trail the title and confuse year and content heuristics.
+    text = _DOI_URL_RE.sub('', ref_text)
+    text = _BARE_DOI_RE.sub('', text)
+
+    # --- 3. Cleanup ---
     # Strip bracketed labels at the start with year info: [ Wang et al., 2025b ]
-    text = re.sub(r'^\s*\[\s*.*?\d{4}[a-z]?\s*\]\s*', '', ref_text)
+    text = re.sub(r'^\s*\[\s*.*?\d{4}[a-z]?\s*\]\s*', '', text)
     # Strip simple numbered brackets: [1], [36]
     text = re.sub(r'^\s*\[?\d+\]?\s*', '', text).strip()
 
-    # --- 3. Quote Matching ---
+    # --- 4. Quote Matching ---
     # Quoted titles: "…", “…”, ``…'', or ``…'
-    quoted = re.search(r'(?:"|“|``)(.*?)(?:"|”|\'\')', text)
+    quoted = re.search(r'(?:"|"|``)(.*?)(?:"|"|\'\')', text)
     if quoted:
-        return quoted.group(1).strip()
+        return _clean_title(quoted.group(1).strip())
 
-    # --- 4. Author-Year Punctuation Heuristic ---
+    # --- 5. Author-Year Punctuation Heuristic ---
     # Often titles follow "(Year)" or "Year."
     year_match = re.search(r'\(?(?:19|20)\d{2}[a-z]?\)?', text)
     if year_match:
         after_year = text[year_match.end():].strip()
-        # If there's content after the year, it's very likely the title
         if len(after_year) > 20:
-            # Strip leading dots/commas
             after_year = re.sub(r'^[.,\s]+', '', after_year)
-            # Split by ". ", common volume/page markers, AND conference venue markers
             title_candidate = re.split(
                 r'\.\s+|[?!]\s+[Ii]n:\s+|,\s+[Ii]n:\s+|\s+[Ii]n:\s+|,\s+[Vv]ol\.|,\s+[Pp][Pp]\.',
                 after_year
             )[0]
             if len(title_candidate) > 20:
                 lower_cand = title_candidate.lower()
-                if not (lower_cand.startswith('doi') or lower_cand.startswith('url') or lower_cand.startswith('http') or lower_cand.startswith('arxiv')):
-                    if not re.match(r'^\s*(pp\.|pages?|\d+\s*[-\u2013]\s*\d+)', lower_cand):
-                        return strip_venue_suffix(title_candidate.strip())
+                starts_with_garbage = (
+                    lower_cand.startswith('doi') or
+                    lower_cand.startswith('url') or
+                    lower_cand.startswith('http') or
+                    lower_cand.startswith('arxiv') or
+                    re.match(r'^\s*(pp\.|pages?|\d+\s*[-\u2013]\s*\d+)', lower_cand)
+                )
+                if not starts_with_garbage and not _is_numeric_garbage(title_candidate):
+                    return _clean_title(title_candidate.strip())
 
-    # --- 5. Content Heuristic (First sentence that isn't just authors) ---
-    # We split by periods and look for a part that "looks like a title"
-    # This is excellent for "Author. Title. Journal" styles like LNCS/Springer.
+    # --- 6. Content Heuristic (First sentence that isn't just authors) ---
     parts = [p.strip() for p in re.split(r'\.\s+', text) if p.strip()]
     for part in parts:
         if len(part) < 20:
             continue
         if "et al" in part.lower():
             continue
-            
-        # Sentiment check: does it look like names? (Author lists often have many commas)
+
+        if _is_author_list(part):
+            continue
+
         comma_count = part.count(',')
         if comma_count > 3 and len(part) < 150:
-            # If it has a colon, it's likely "Authors: Title"
             if ':' not in part:
-                # If it doesn't have many common words, it's probably just authors
                 words = set(re.findall(r'\b\w+\b', part.lower()))
                 if not (words & COMMON_TITLE_WORDS):
                     continue
 
-        # If it's long and has common words, it's probably the title.
         words = set(re.findall(r'\b\w+\b', part.lower()))
         if words & COMMON_TITLE_WORDS:
-            return strip_venue_suffix(strip_author_header(part, COMMON_TITLE_WORDS))
+            candidate = _clean_title(part)
+            if not _is_numeric_garbage(candidate) and len(candidate) >= 5:
+                return candidate
 
-    # --- 6. Comma-delimited segment ---
-    # Handle styles like "Author, Author AND Author, Title, Year" with no quotes
+    # --- 7. Comma-delimited segment ---
     if ',' in text:
-        # Split by comma and iterate through segments
         segments = [s.strip() for s in text.split(',') if s.strip()]
         for i, segment in enumerate(segments):
-            # Author markers: initials (A.B.), "and ", "&", "et al"
+            if _is_author_list(segment) and ':' not in segment:
+                continue
             is_author = False
             has_initials = re.search(r'[A-Z]\.?\s*[A-Z]?\.', segment)
             has_connector = re.search(r'\band\b|\bet al\b|&', segment, re.IGNORECASE)
-            
+
             if has_initials and len(segment) < 25:
                 is_author = True
             elif has_connector and len(segment) < 35:
-                # 'and' only marks an author if the segment is short
                 is_author = True
             elif len(segment) < 15:
                 is_author = True
-            
+
             if is_author:
                 continue
-            
-            # If it's NOT an author, check if it's a title (long enough + has common words)
+
             if len(segment) > 20:
                 words = set(re.findall(r'\b\w+\b', segment.lower()))
                 if words & COMMON_TITLE_WORDS:
-                    return strip_venue_suffix(strip_author_header(segment, COMMON_TITLE_WORDS))
-            
-    # Final fallback: take the longest reasonable part or the first 100 chars
+                    candidate = _clean_title(segment)
+                    if not _is_numeric_garbage(candidate) and len(candidate) >= 5:
+                        return candidate
+
+    # --- 8. Fallback ---
     fallback_parts = [p.strip() for p in re.split(r'\.\s+', text) if len(p.strip()) > 10]
     if fallback_parts:
         best = sorted(fallback_parts, key=len, reverse=True)[0]
-        return strip_venue_suffix(strip_author_header(best, COMMON_TITLE_WORDS))
-    
-    return strip_venue_suffix(strip_author_header(text[:100].strip(), COMMON_TITLE_WORDS))
+        return _clean_title(best)
+
+    return _clean_title(text[:100].strip())
+
+
+def _strip_trailing_url(title: str) -> str:
+    """Removes trailing URLs and bare DOIs from an extracted title string."""
+    title = _ARXIV_URL_RE.sub('', title)
+    title = _DOI_URL_RE.sub('', title)
+    title = _BARE_DOI_RE.sub('', title)
+    title = _URL_RE.sub('', title)
+    # Clean up leading/trailing whitespace and punctuation artifacts
+    title = re.sub(r'\s+', ' ', title).strip()
+    title = title.rstrip('.,; ')
+    return title
 
 
 def extract_doi_info(ref_text: str):

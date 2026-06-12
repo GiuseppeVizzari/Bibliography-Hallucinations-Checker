@@ -1,6 +1,36 @@
-import fitz  # PyMuPDF
+import fitz
 import re
 from .checkers.normalizer import heal_hyphens
+
+
+_LINE_NUM_PATTERN = re.compile(r'^\d{1,4}$')
+_NUMERIC_TABLE_PATTERN = re.compile(r'^[\+\-±]?\d+([.,]\d+)?([eE][\+\-]?\d+)?$')
+_AUTHOR_YEAR_PATTERN = re.compile(
+    r'(?:(?:\r?\n|\r|^)\s*\[[A-Z][^\[\]]*\d{4}[a-z]?\]\s*)'
+)
+
+
+def _strip_embedded_line_numbers(text: str) -> str:
+    """Removes lines that are standalone 1–4 digit line numbers."""
+    if not text:
+        return text
+    lines = text.splitlines()
+    return '\n'.join(
+        line for line in lines
+        if not _LINE_NUM_PATTERN.match(line.strip())
+    )
+
+
+def _is_marginal_line_number(block: tuple, page_width: float) -> bool:
+    """
+    Returns True if the block is a narrow numeric block sitting in the
+    left or right margin — a strong indicator of a marginal line number.
+    """
+    x0, _, x1, _ = block[0], block[1], block[2], block[3]
+    text = block[4].strip()
+    width = x1 - x0
+    in_margin = x0 < 50 or x1 > page_width - 50
+    return bool(in_margin and width < 60 and _LINE_NUM_PATTERN.match(text))
 
 
 def _is_numeric_table_row(text: str) -> bool:
@@ -12,9 +42,9 @@ def _is_numeric_table_row(text: str) -> bool:
     tokens = text.split()
     if len(tokens) < 4:
         return False
-    numeric_pat = re.compile(r'^[\+\-±]?\d+([.,]\d+)?([eE][\+\-]?\d+)?$')
-    numeric_count = sum(1 for t in tokens if numeric_pat.match(t.strip('.,;:')))
+    numeric_count = sum(1 for t in tokens if _NUMERIC_TABLE_PATTERN.match(t.strip('.,;:')))
     return (numeric_count / len(tokens)) > 0.60
+
 
 def extract_bibliography(pdf_path):
     """
@@ -23,85 +53,87 @@ def extract_bibliography(pdf_path):
     """
     doc = fitz.open(pdf_path)
     full_text = ""
-    
+
     # 1. Extract text with layout preservation (blocks)
-    # PyMuPDF's get_text('blocks') returns (x0, y0, x1, y1, text, block_no, block_type)
-    # We sort by vertical position then horizontal to handle columns somewhat naturally,
-    # but for true 2-column support, fitz's default block ordering is usually good enough 
-    # if the reading order is encoded correctly. 
-    # For robust 2-column, we can sort blocks: top-down, left-right.
-    
     all_blocks = []
     for page_idx, page in enumerate(doc):
         page_height = page.rect.height
-        margin = 50 # Reduced from 10% to 50 points to avoid filtering out headers and content
-        
+        page_width = page.rect.width
+        margin = 50
+
         blocks = page.get_text("blocks")
-        # clean blocks: remove blocks with no text or just whitespace
         cleaned_blocks = []
         for b in blocks:
-            if b[6] == 0: # text block
-                # Filter out headers/footers based on y-coordinate
+            if b[6] == 0:
                 y0, y1 = b[1], b[3]
                 if y0 < margin or y1 > (page_height - margin):
                     continue
 
+                # Skip marginal line-number blocks (narrow, near edge, purely numeric)
+                if _is_marginal_line_number(b, page_width):
+                    continue
+
                 block_text = b[4].strip()
-                if block_text:
-                    # Filter out pure line number blocks (e.g., '1\n2\n3' or '45')
-                    # This prevents draft line numbers from being interleaved with the text
-                    if re.match(r'^(\d+\s*)+$', block_text):
-                        continue
-                    # Convert block to a list and append the page index
-                    b_list = list(b)
-                    b_list.append(page_idx)
-                    cleaned_blocks.append(b_list)
-        
-        # Sort blocks to handle two-column layouts.
-        # Group by horizontal position into left/right halves to avoid splitting indented blocks.
-        # This ensures the left column is read top-to-bottom before the right column.
+                if not block_text:
+                    continue
+
+                # Filter out pure line number blocks
+                if _LINE_NUM_PATTERN.match(block_text):
+                    continue
+
+                # Filter out pure line number sequence blocks
+                if re.match(r'^(\d+\s*)+$', block_text):
+                    continue
+
+                b_list = list(b)
+                b_list.append(page_idx)
+                cleaned_blocks.append(b_list)
+
         mid_x = page.rect.width / 2
         cleaned_blocks.sort(key=lambda b: (0 if b[0] < mid_x else 1, b[1]))
-        
         all_blocks.extend(cleaned_blocks)
 
     total_pages = len(doc)
     doc.close()
 
     # 2. Find "References" or "Bibliography" section
-    # We'll look for a block that contains *only* (or mostly) the header.
-    # We iterate through blocks to find the split point.
-    
     candidates = []
     keywords = ["references", "bibliography", "works cited", "bibliografia", "riferimenti", "rererences"]
-    
+
     for i, block in enumerate(all_blocks):
-        text = block[4].strip().lower()
-        # Check if the block is a header (short length, contains keyword)
-        if len(text.split()) < 10: 
-            if any(k in text for k in keywords):
-                # Potential match. 
-                # Strict check: if it's just the word (plus maybe numbers/punctuation)
-                clean_text = re.sub(r'[^a-z]', '', text)
+        raw_text = block[4].strip()
+        text = raw_text.lower()
+
+        # Check if the first line of a multi-line block is a header
+        # (handles PDFs where line numbers merge header + first ref into one block)
+        first_line = raw_text.splitlines()[0].lower().strip() if raw_text else ''
+
+        # Consider the block a header candidate if:
+        # - block is short (< 10 words), OR
+        # - first line alone matches a header keyword (< 10 words, blocks with merged line numbers)
+        text_to_check = first_line if len(text.split()) >= 10 else text
+
+        if len(text_to_check.split()) < 10:
+            if any(k in text_to_check for k in keywords):
+                clean_text = re.sub(r'[^a-z]', '', text_to_check)
                 if any(k in clean_text for k in keywords):
                     page_num = block[7]
-                    
-                    # Skip if it looks like a Table of Contents entry:
-                    # e.g., contains a trailing page number, dotted lines, or appears in the first 25% of pages of a larger document.
+
+                    # Strip line numbers before ToC check to avoid false positives
+                    text_no_ln = _strip_embedded_line_numbers(text_to_check)
                     is_toc = False
-                    if re.search(r'\d+$', text) or '..' in text or '. .' in text:
+                    if re.search(r'\d+$', text_no_ln) or '..' in text_no_ln or '. .' in text_no_ln:
                         is_toc = True
                     if total_pages >= 4 and page_num < total_pages * 0.25:
                         is_toc = True
-                        
+
                     if not is_toc:
                         candidates.append(i)
-                        
+
     ref_start_index = candidates[0] if candidates else -1
     if ref_start_index != -1:
         print(f"  [DEBUG] Bibliography section found at block {ref_start_index}: '{all_blocks[ref_start_index][4].strip()[:60]}'")
 
-    
     if ref_start_index == -1:
         print("  [DEBUG] Could not find bibliography section header in any block.")
         return []
@@ -117,15 +149,13 @@ def extract_bibliography(pdf_path):
         "funding", "competing interest", "competing interests", "contributors",
         "credit", "credit author statement", "author statement", "use of generative", "generative ai"
     ]
-    
+
     print(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
     for i in range(ref_start_index + 1, len(all_blocks)):
         block_text = all_blocks[i][4].strip()
         lower_text = block_text.lower()
         first_line = block_text.splitlines()[0][:80] if block_text else ''
 
-        # Check if this block looks like a termination header (appendix, acknowledgements, biography, etc.)
-        # Normalize spaces to single space for robust matching of phrases
         norm_text = re.sub(r'\s+', ' ', lower_text).strip()
         term_pattern = (
             r'^(appendix|appendices|annex|supplement|acknowledg|author\s+contribution|'
@@ -138,24 +168,20 @@ def extract_bibliography(pdf_path):
             print(f"  [DEBUG] STOP (anchor match): '{first_line}'")
             break
 
-        # Appendix letter-section heading: "Appendix A", "A.1 ...", etc.
         if re.match(r'^appendix\s+[a-z0-9]', lower_text):
             print(f"  [DEBUG] STOP (appendix letter): '{first_line}'")
             break
 
-        # Appendix table / figure caption: "Table A1", "Fig. A2", "Figure A3"
         if re.match(r'^(table|fig\.?|figure)\s+[a-z]\d*\b', lower_text):
             print(f"  [DEBUG] STOP (appendix table/figure): '{first_line}'")
             break
 
-        # Exact-match check for short blocks (normalises out numbers/punct)
         if len(lower_text.split()) < 10:
             clean_text = re.sub(r'[^a-z]', '', lower_text)
             if any(k.replace(' ', '') == clean_text for k in termination_keywords):
                 print(f"  [DEBUG] STOP (exact match): '{first_line}'")
                 break
 
-        # Skip blocks that look like pure numeric table rows (appendix data)
         if _is_numeric_table_row(block_text):
             print(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
             continue
@@ -164,69 +190,66 @@ def extract_bibliography(pdf_path):
         ref_content.append(block_text)
 
     print(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
-        
+
     full_ref_text = "\n".join(ref_content)
-    
+
+    # Strip embedded line numbers from the full text before splitting
+    full_ref_text = _strip_embedded_line_numbers(full_ref_text)
+
     def prune_trailing_garbage(ref_text: str) -> str:
-        """
-        Prunes any trailing garbage (biographies, appendices, etc.) from a reference string
-        by checking if any line looks like a termination header.
-        """
         lines = ref_text.splitlines()
         clean_lines = []
         for line in lines:
             lower_line = line.strip().lower()
-            # Clean up leading numbers/punctuation/spaces for matching (e.g. "12. Biography" -> "biography")
             normalized = re.sub(r'^[\d\s\.\-\/\:]+', '', lower_line)
-            
             is_termination = False
             for kw in termination_keywords:
                 if normalized.startswith(kw):
                     is_termination = True
                     break
-            
             if is_termination:
                 break
             clean_lines.append(line)
         return "\n".join(clean_lines)
 
+    def cleanup_ref(text: str) -> str:
+        """Applies all per-reference cleanup: line numbers, hyphens, newlines."""
+        text = _strip_embedded_line_numbers(text)
+        return heal_hyphens(text.strip()).replace('\n', ' ')
+
     # 4. Split into individual references
-    # Common formats: 
-    # [1] Authors...
-    # 1. Authors...
-    # Authors... (hanging indent - harder to detect in plain text string without coordinate analysis)
-    
-    # We will try a few regex strategies.
-    
     # Strategy A: Bracketed numbers [1], [2], etc.
     if re.search(r'^\s*\[\d+\]', full_ref_text, re.MULTILINE):
-        # Split by lookahead for [n] at the start of a line
         refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\[\d+\])', full_ref_text)
         refs = [prune_trailing_garbage(r) for r in refs]
-        # Filter out empty or whitespace only strings
-        refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
-        # Filter out the header if it got caught (usually handled by block logic, but good safety)
+        refs = [cleanup_ref(r) for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
         return refs
 
     # Strategy B: Numbered 1., 2.
-    # Need to be careful not to split on "Vol. 1."
     if re.search(r'^\s*1\.\s+', full_ref_text, re.MULTILINE):
         refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\d+\.\s+)', full_ref_text)
         refs = [prune_trailing_garbage(r) for r in refs]
-        refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
+        refs = [cleanup_ref(r) for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
         return refs
 
-    # Strategy C: Fallback — use ref_content which has already had the termination
-    # boundary applied (appendix, acknowledgements, etc. are excluded).
-    # Many PDFs use one block per paragraph/reference.
+    # Strategy D: Author-year [Author, Year] style
+    # This handles PDFs that pack all references into a single block
+    # with [Author, Year] markers (common in some LaTeX templates).
+    if re.search(_AUTHOR_YEAR_PATTERN, full_ref_text):
+        refs = re.split(_AUTHOR_YEAR_PATTERN, full_ref_text)
+        refs = [prune_trailing_garbage(r) for r in refs]
+        refs = [cleanup_ref(r) for r in refs if r.strip()]
+        refs = [r for r in refs if len(r) > 20]
+        return refs
+
+    # Strategy C: Fallback — one block per reference
     raw_refs = []
     for block_text in ref_content:
         pruned_block = prune_trailing_garbage(block_text)
-        text = heal_hyphens(pruned_block).replace('\n', ' ')
-        if len(text) > 20:  # arbitrary filter for "real" ref
+        text = cleanup_ref(pruned_block)
+        if len(text) > 20:
             raw_refs.append(text)
 
     return raw_refs
-
