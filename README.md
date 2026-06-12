@@ -1,55 +1,115 @@
-# Bibliography Hallucinations Checker - Setup Guide
+# Bibliography Hallucinations Checker
+
+A Flask web application that extracts bibliographic references from PDFs and verifies them against multiple open scholarly APIs to detect "hallucinated" (non-existent or mismatched) entries.
 
 ## Quick Start
 
 ### 1. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Your Email (Optional)
-The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polite pool"), you can add your email to the `.env` file:
+The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polite pool"), add your email to the `.env` file:
 
 ```env
 OPENALEX_EMAIL=your-email@example.com
 ```
 
 ### 3. Run the Application
+
 ```bash
 python run.py
 ```
 
 Visit [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-To capture all output to a log file for debugging:
+To capture all output to a log file:
+
 ```bash
 python run.py > debug.log 2>&1
 ```
 
 ## How It Works
 
-The app performs a multi-stage verification process to ensure references in your PDF are legitimate and not "hallucinations".
+### Pipeline Overview
 
-1. **Bibliography Detection**: The app parses your PDF to locate the bibliography section. It recognises a broad set of section headers, including English (`References`, `Bibliography`, `Works Cited`), Italian (`Bibliografia`, `Riferimenti`), and common typos (`Rererences`). Once found, it collects only the content up to the next section boundary (appendix, acknowledgements, etc.) and ignores the rest.
-2. **Appendix Skipping**: After the bibliography, common section headers (Appendix, Annex, Supplementary Material, and Italian equivalents such as *Appendice*, *Ringraziamenti*) act as hard stop points. Appendix table/figure captions (`Table A1`, `Fig. A2`) and pure numeric table rows are also filtered out to prevent false positives.
-3. **Reference Splitting**: The app automatically detects the citation style in use:
-   - **Bracketed numbers** – `[1]`, `[2]`, … (IEEE / Vancouver)
-   - **Plain numbers** – `1.`, `2.`, … (numbered lists)
-   - **Block-based** – one paragraph per reference, as used by APA, Chicago, and similar author–date styles
-4. **Identifier Extraction & Healing**: DOIs, arXiv IDs, and bare URLs are extracted from each reference. If a DOI has been split by a line break or space in the PDF (e.g. `10.3390/ fi15010012`), the app attempts to reconstruct and validate it automatically.
-5. **Verification**:
-   - **DOI-First**: Lookups in **OpenAlex**, **Crossref**, and **DataCite** (for Zenodo/repository DOIs).
-   - **arXiv Support**: Direct verification for arXiv pre-prints using the official API.
-   - **Title Fallback**: When no identifier is found, a full-text search in **OpenAlex** is performed using the extracted title. The title extractor handles quoted titles, author-year formats (APA/Chicago), and comma-delimited styles, while rejecting false positives such as page-number ranges or DOI strings.
-6. **Similarity Checking**: Every found result is compared against the original reference text using a string-similarity algorithm (`difflib`), so a wrong-paper match is visually flagged even when the lookup technically succeeds.
+```
+PDF Upload → Bibliography Detection → Reference Splitting → 
+Identifier Extraction → 5-Step Verification → Similarity Scoring → Results
+```
+
+### 1. Bibliography Detection
+
+The app parses the PDF via PyMuPDF, extracting text blocks with layout preservation. Two-column layouts are handled by sorting blocks left-to-right, top-to-bottom. It recognises a broad set of section headers: English (`References`, `Bibliography`, `Works Cited`), Italian (`Bibliografia`, `Riferimenti`), and common typos (`Rererences`). Table-of-contents entries (containing trailing page numbers or dotted leaders) are rejected heuristically.
+
+### 2. Appendix & Garbage Skipping
+
+After the bibliography header, common termination keywords act as hard stop points: `Appendix`, `Annex`, `Acknowledgments`, `Biography`, `Credit Author Statement`, `Generative AI`, `Supplementary Material`, Italian equivalents (`Appendice`, `Ringraziamenti`), and others (~30 terms). Appendix table/figure captions (`Table A1`, `Fig. A2`) and pure numeric table rows (>60% numeric tokens) are filtered out to prevent false positives.
+
+### 3. Reference Splitting
+
+The app auto-detects the citation style:
+
+- **Bracketed numbers** – `[1]`, `[2]`, ... (IEEE / Vancouver)
+- **Plain numbers** – `1.`, `2.`, ... (numbered lists)
+- **Block-based** – one block per reference, used by APA, Chicago, and similar author–date styles
+
+Hyphenated words broken across PDF lines (e.g. `be-\nhaviors`) are automatically rejoined.
+
+### 4. Identifier Extraction
+
+DOIs, arXiv IDs, and bare URLs are extracted from each reference. A multi-strategy **title extraction** cascade (7 strategies) handles quoted titles, author-year punctuation (APA/Chicago), comma-delimited styles, and colon-separated LNCS/Springer formats, while rejecting false positives such as page-number ranges or DOI strings.
+
+### 5. Five-Step Verification Pipeline
+
+Each reference is checked in priority order:
+
+| Step | Method | Source | Notes |
+|------|--------|--------|-------|
+| 1 | DOI lookup | OpenAlex → Crossref / DataCite | Zenodo DOIs (10.5281) route to DataCite first |
+| 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping/spaces |
+| 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
+| 4 | Title search | OpenAlex | Full-text search with a 0.35 relevance gate — results below the threshold are discarded |
+| 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
+
+### 6. Similarity Scoring
+
+Every successfully matched result is compared against the extracted reference title using `difflib.SequenceMatcher`. The score determines the visual badge in the UI.
+
+## Project Structure
+
+```
+app/
+├── __init__.py                   # Flask app factory (16 MB upload limit, 413 error handler)
+├── routes.py                     # Upload route + processing loop
+├── pdf_processor.py              # PDF parsing, bibliography detection, reference splitting
+├── reference_checker.py          # Backward-compatibility shim
+│
+└── checkers/
+    ├── __init__.py               # Exports check_reference
+    ├── orchestrator.py           # 5-step verification pipeline
+    ├── extraction.py             # DOI/arXiv ID/title extraction heuristics
+    ├── normalizer.py             # Unicode ligature decomposition, quote normalization, similarity
+    │
+    └── backends/
+        ├── openalex.py           # OpenAlex API (DOI lookup + title search)
+        ├── crossref.py           # Crossref API via habanero
+        ├── datacite.py           # DataCite REST API
+        ├── arxiv.py              # arXiv Atom feed API
+        └── url_checker.py        # Direct URL fetcher (HTML/PDF)
+```
 
 ## Features
 
 - ✅ **Hallucination Detection**: Visual cues (badges and row highlighting) flag found references that differ significantly from the PDF text.
 - ✅ **Multi-language Bibliography Headers**: Supports English and Italian section titles, plus common OCR/typo variants.
-- ✅ **Appendix Termination**: Automatically stops collecting references when it encounters appendix or acknowledgement sections, including lettered appendix tables (`Table A1`) and numeric table rows.
+- ✅ **Appendix Termination**: Automatically stops collecting references at ~30 termination keywords, including lettered appendix tables and numeric table rows.
+- ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
-- ✅ **Multi-Engine Search**: OpenAlex, Crossref, DataCite, and arXiv support.
+- ✅ **Five-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, and direct URL resource fetching.
+- ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
 - ✅ **Detailed Metadata**: Extracts Title, Authors, Year, and Venue for each verified reference.
@@ -67,19 +127,22 @@ The app performs a multi-stage verification process to ensure references in your
 
 - **Extracted Reference** — raw text pulled from the PDF. A 🔗 **Source** badge appears below when a DOI, arXiv ID, or URL was found in the original text.
 - **Status** — `Found`, `Check Match`, `Not Found`, `Skipped`, or `Error`.
-- **Source** — which API resolved the reference (OpenAlex, Crossref, DataCite, arXiv).
+- **Source** — which API resolved the reference (OpenAlex, Crossref, DataCite, arXiv, or URL Resource).
 - **Online Data** — the title (clickable link to the paper), authors, venue, year, and similarity score.
 
 ## Troubleshooting
 
 ### "No references found"
+
 - The app looks for `References`, `Bibliography`, `Works Cited`, `Bibliografia`, and `Riferimenti`. If the PDF uses a different heading, the section will not be detected.
 - Try checking the PDF manually and confirming the section header text.
 
 ### Too many false-positive references (appendix content included)
+
 - Run with debug logging (`python run.py > debug.log 2>&1`) and inspect lines marked `[DEBUG] INCLUDE block` after the bibliography header. These show exactly what text the parser is collecting. If appendix blocks appear, their heading text can be added to the termination keyword list in `app/pdf_processor.py`.
 
 ### Port 5000 in Use (macOS)
+
 - If you see "Address already in use", disable **AirPlay Receiver** in System Settings → General → AirDrop & Handoff, as it often occupies port 5000.
 
 ## Acknowledgments
