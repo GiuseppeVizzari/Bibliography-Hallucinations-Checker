@@ -44,9 +44,9 @@ def extract_bibliography(pdf_path):
     # For robust 2-column, we can sort blocks: top-down, left-right.
     
     all_blocks = []
-    for page in doc:
+    for page_idx, page in enumerate(doc):
         page_height = page.rect.height
-        margin = page_height * 0.10 # 10% margin for headers/footers
+        margin = 50 # Reduced from 10% to 50 points to avoid filtering out headers and content
         
         blocks = page.get_text("blocks")
         # clean blocks: remove blocks with no text or just whitespace
@@ -60,16 +60,31 @@ def extract_bibliography(pdf_path):
 
                 block_text = b[4].strip()
                 if block_text:
-                    cleaned_blocks.append(b)
+                    # Filter out pure line number blocks (e.g., '1\n2\n3' or '45')
+                    # This prevents draft line numbers from being interleaved with the text
+                    if re.match(r'^(\d+\s*)+$', block_text):
+                        continue
+                    # Convert block to a list and append the page index
+                    b_list = list(b)
+                    b_list.append(page_idx)
+                    cleaned_blocks.append(b_list)
+        
+        # Sort blocks to handle two-column layouts.
+        # Group by horizontal position into left/right halves to avoid splitting indented blocks.
+        # This ensures the left column is read top-to-bottom before the right column.
+        mid_x = page.rect.width / 2
+        cleaned_blocks.sort(key=lambda b: (0 if b[0] < mid_x else 1, b[1]))
+        
         all_blocks.extend(cleaned_blocks)
 
+    total_pages = len(doc)
     doc.close()
 
     # 2. Find "References" or "Bibliography" section
     # We'll look for a block that contains *only* (or mostly) the header.
     # We iterate through blocks to find the split point.
     
-    ref_start_index = -1
+    candidates = []
     keywords = ["references", "bibliography", "works cited", "bibliografia", "riferimenti", "rererences"]
     
     for i, block in enumerate(all_blocks):
@@ -81,9 +96,23 @@ def extract_bibliography(pdf_path):
                 # Strict check: if it's just the word (plus maybe numbers/punctuation)
                 clean_text = re.sub(r'[^a-z]', '', text)
                 if any(k in clean_text for k in keywords):
-                    ref_start_index = i
-                    print(f"  [DEBUG] Bibliography section found at block {i}: '{block[4].strip()[:60]}'")
-                    break 
+                    page_num = block[7]
+                    
+                    # Skip if it looks like a Table of Contents entry:
+                    # e.g., contains a trailing page number, dotted lines, or appears in the first 25% of pages of a larger document.
+                    is_toc = False
+                    if re.search(r'\d+$', text) or '..' in text or '. .' in text:
+                        is_toc = True
+                    if total_pages >= 4 and page_num < total_pages * 0.25:
+                        is_toc = True
+                        
+                    if not is_toc:
+                        candidates.append(i)
+                        
+    ref_start_index = candidates[0] if candidates else -1
+    if ref_start_index != -1:
+        print(f"  [DEBUG] Bibliography section found at block {ref_start_index}: '{all_blocks[ref_start_index][4].strip()[:60]}'")
+
     
     if ref_start_index == -1:
         print("  [DEBUG] Could not find bibliography section header in any block.")
@@ -94,7 +123,11 @@ def extract_bibliography(pdf_path):
     termination_keywords = [
         "appendix", "appendices", "annex", "supplementary material", "supplemental material",
         "acknowledgment", "acknowledgments", "author contributions", "conflicts of interest",
-        "biography", "index", "glossary", "appendice", "appendici", "ringraziamenti"
+        "biography", "biographies", "about the author", "about the authors",
+        "author biography", "author biographies", "biographical", "index", "glossary",
+        "appendice", "appendici", "ringraziamenti", "declaration of interest", "declarations of interest",
+        "funding", "competing interest", "competing interests", "contributors",
+        "credit", "credit author statement", "author statement", "use of generative", "generative ai"
     ]
     
     print(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
@@ -103,11 +136,17 @@ def extract_bibliography(pdf_path):
         lower_text = block_text.lower()
         first_line = block_text.splitlines()[0][:80] if block_text else ''
 
-        # Check if this block looks like a termination header (appendix, acknowledgements, etc.)
-        # NOTE: we check ALL blocks regardless of length — appendix headings can be long.
-
-        # Anchor detection: block starts with one of the termination words
-        if re.match(r'^(appendix|appendices|annex|acknowledgment|acknowledgments|supplement|appendice|appendici|ringraziamenti)\b', lower_text):
+        # Check if this block looks like a termination header (appendix, acknowledgements, biography, etc.)
+        # Normalize spaces to single space for robust matching of phrases
+        norm_text = re.sub(r'\s+', ' ', lower_text).strip()
+        term_pattern = (
+            r'^(appendix|appendices|annex|supplement|acknowledg|author\s+contribution|'
+            r'conflict\s+of\s+interest|biography|biographies|author\s+biograph|'
+            r'about\s+the\s+author|index|glossary|appendice|appendici|ringraziamenti|'
+            r'declaration\s+of\s+interest|funding|competing\s+interest|contributor|'
+            r'credit|author\s+statement|use\s+of\s+generative|generative\s+ai)\b'
+        )
+        if re.match(term_pattern, norm_text):
             print(f"  [DEBUG] STOP (anchor match): '{first_line}'")
             break
 
@@ -140,6 +179,29 @@ def extract_bibliography(pdf_path):
         
     full_ref_text = "\n".join(ref_content)
     
+    def prune_trailing_garbage(ref_text: str) -> str:
+        """
+        Prunes any trailing garbage (biographies, appendices, etc.) from a reference string
+        by checking if any line looks like a termination header.
+        """
+        lines = ref_text.splitlines()
+        clean_lines = []
+        for line in lines:
+            lower_line = line.strip().lower()
+            # Clean up leading numbers/punctuation/spaces for matching (e.g. "12. Biography" -> "biography")
+            normalized = re.sub(r'^[\d\s\.\-\/\:]+', '', lower_line)
+            
+            is_termination = False
+            for kw in termination_keywords:
+                if normalized.startswith(kw):
+                    is_termination = True
+                    break
+            
+            if is_termination:
+                break
+            clean_lines.append(line)
+        return "\n".join(clean_lines)
+
     # 4. Split into individual references
     # Common formats: 
     # [1] Authors...
@@ -152,6 +214,7 @@ def extract_bibliography(pdf_path):
     if re.search(r'^\s*\[\d+\]', full_ref_text, re.MULTILINE):
         # Split by lookahead for [n] at the start of a line
         refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\[\d+\])', full_ref_text)
+        refs = [prune_trailing_garbage(r) for r in refs]
         # Filter out empty or whitespace only strings
         refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
         # Filter out the header if it got caught (usually handled by block logic, but good safety)
@@ -162,6 +225,7 @@ def extract_bibliography(pdf_path):
     # Need to be careful not to split on "Vol. 1."
     if re.search(r'^\s*1\.\s+', full_ref_text, re.MULTILINE):
         refs = re.split(r'(?=(?:\r?\n|\r|^)\s*\d+\.\s+)', full_ref_text)
+        refs = [prune_trailing_garbage(r) for r in refs]
         refs = [heal_hyphens(r.strip()).replace('\n', ' ') for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
         return refs
@@ -171,8 +235,10 @@ def extract_bibliography(pdf_path):
     # Many PDFs use one block per paragraph/reference.
     raw_refs = []
     for block_text in ref_content:
-        text = heal_hyphens(block_text).replace('\n', ' ')
+        pruned_block = prune_trailing_garbage(block_text)
+        text = heal_hyphens(pruned_block).replace('\n', ' ')
         if len(text) > 20:  # arbitrary filter for "real" ref
             raw_refs.append(text)
 
     return raw_refs
+

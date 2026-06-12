@@ -1,4 +1,4 @@
-import os, re
+import os, re, traceback
 from flask import Blueprint, render_template, request, flash, redirect, current_app
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
@@ -84,6 +84,7 @@ def index():
                 return render_template('results.html', results=results, total_count=total_refs)
                 
             except Exception as e:
+                traceback.print_exc()
                 flash(f'Error processing file: {str(e)}')
                 return redirect(request.url)
             finally:

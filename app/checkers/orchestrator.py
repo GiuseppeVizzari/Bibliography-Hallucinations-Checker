@@ -19,7 +19,7 @@ from .extraction import (
     extract_arxiv_id,
 )
 from .normalizer import calculate_similarity
-from .backends import openalex, crossref, datacite, arxiv as arxiv_backend
+from .backends import openalex, crossref, datacite, arxiv as arxiv_backend, url_checker
 
 
 def _run_doi_search_cycle(doi: str) -> dict:
@@ -102,6 +102,12 @@ def check_reference(ref_text: str) -> dict:
         print(f"  Extracted title: {extracted_title[:80]}...")
         print("  → Falling back to title search...")
         result = openalex.lookup_by_title(extracted_title)
+
+    # --- Step 5: URL checker ---
+    if not result or result["status"] != "found":
+        url = url_checker.extract_url(ref_text)
+        if url:
+            result = url_checker.lookup_by_url(url, extracted_title)
 
     # Similarity scoring
     if result and result.get("status") == "found":
