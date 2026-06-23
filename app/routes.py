@@ -42,7 +42,6 @@ def index():
                     flash('No references found or bibliography section not detected.')
                     return redirect(request.url)
                 
-                import time
                 results = []
                 total_refs = len(refs)
                 

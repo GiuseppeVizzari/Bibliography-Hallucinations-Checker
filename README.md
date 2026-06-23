@@ -69,7 +69,7 @@ Hyphenated words broken across PDF lines (e.g. `be-\nhaviors`) are automatically
 
 ### 5. Identifier Extraction
 
-DOIs, arXiv IDs, and bare URLs are extracted from each reference. A multi-strategy **title extraction** cascade (7 strategies) handles quoted titles, author-year punctuation (APA/Chicago), comma-delimited styles, and colon-separated LNCS/Springer formats, while rejecting false positives such as page-number ranges or DOI strings.
+DOIs, arXiv IDs, and bare URLs are extracted from each reference. A multi-strategy **title extraction** cascade (8 strategies) handles quoted titles, author-year punctuation (APA/Chicago), comma-delimited styles, content-based heuristics, and colon-separated LNCS/Springer formats, while rejecting false positives such as author lists, page-number ranges, and venue abbreviations.
 
 ### 6. Five-Step Verification Pipeline
 
