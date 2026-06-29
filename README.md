@@ -80,7 +80,7 @@ Each reference is checked in priority order:
 | 1 | DOI lookup | OpenAlex → Crossref / DataCite | Zenodo DOIs (10.5281) route to DataCite first |
 | 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping/spaces |
 | 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
-| 4 | Title search | OpenAlex | Full-text search with a 0.35 relevance gate — results below the threshold are discarded |
+| 4 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to general web search if no match or similarity < 0.6 |
 | 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
 
 ### 7. Similarity Scoring
@@ -106,7 +106,9 @@ app/
         ├── crossref.py           # Crossref API via habanero
         ├── datacite.py           # DataCite REST API
         ├── arxiv.py              # arXiv Atom feed API
+        ├── arxiv.py              # arXiv Atom feed API
         └── url_checker.py        # Direct URL fetcher (HTML/PDF)
+        └── web_fallback.py           # General web search and scraping fallback
 ```
 
 ## Features
@@ -123,6 +125,8 @@ app/
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
 - ✅ **Detailed Metadata**: Extracts Title, Authors, Year, and Venue for each verified reference.
 - ✅ **No API Keys Required**: Uses open scholarly APIs.
+- ✅ **Web Search Fallback**: For references not found in academic APIs, the app performs a targeted web search and similarity analysis on page titles.
+- ✅ **Intelligent Fallback**: Automatically triggers web search if academic results are found but have low similarity (< 60%), preventing false positives from blocking discovery.
 
 ## Understanding Results
 
@@ -166,3 +170,5 @@ This project is built using several powerful open-source libraries and APIs:
 - **[arXiv API](https://arxiv.org/help/api)**: Used for direct verification of pre-print identifiers.
 - **[python-dotenv](https://github.com/theskumar/python-dotenv)**: For managing environment variables securely.
 - **[Requests](https://requests.readthedocs.io/)**: To handle all API communications.
+- **[beautifulsoup4](https://www.beautifulsoup.com/)**: For parsing HTML content during web fallback.
+- **[duckduckgo-search](https://pypi.org/project/duckduckgo-search/)**: For performing privacy-respecting web searches without an API key.

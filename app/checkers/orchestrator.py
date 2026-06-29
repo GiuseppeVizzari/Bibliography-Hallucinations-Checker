@@ -19,7 +19,7 @@ from .extraction import (
     extract_arxiv_id,
 )
 from .normalizer import calculate_similarity, strip_doi_punctuation
-from .backends import openalex, crossref, datacite, arxiv as arxiv_backend, url_checker
+from .backends import openalex, crossref, datacite, arxiv as arxiv_backend, url_checker, web_fallback
 
 
 def _run_doi_search_cycle(doi: str) -> dict:
@@ -107,6 +107,18 @@ def check_reference(ref_text: str) -> dict:
             print(f"  Extracted title: {extracted_title[:80]}...")
             print("  → Falling back to title search...")
             result = openalex.lookup_by_title(extracted_title)
+            
+            # Fallback to web search if the match is poor (< 0.6 similarity)
+            if result and result.get("status") == "found":
+                sim = calculate_similarity(extracted_title, result.get("title", ""))
+                if sim < 0.6:
+                    print(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < 0.60). Trying web search...")
+                    result = {"status": "not_found"}
+
+        # --- Step 4b: Web search fallback ---
+        if not result or result["status"] != "found":
+            print("  → Falling back to web search...")
+            result = web_fallback.lookup_by_title(extracted_title, full_ref=ref_text)
 
         # --- Step 5: URL checker ---
         if not result or result["status"] != "found":

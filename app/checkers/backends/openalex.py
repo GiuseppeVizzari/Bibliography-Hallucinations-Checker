@@ -3,70 +3,99 @@ app/checkers/backends/openalex.py
 
 OpenAlex API backend — supports DOI lookup and full-text title search.
 """
+
 import os
 import re
+import time
+from typing import Any, Callable, Optional
+
 import pyalex
-from typing import Optional
-from pyalex import Works
 from dotenv import load_dotenv
+from pyalex import Works
+
 from ..normalizer import (
-    normalize_quotes, normalize_ligatures, calculate_similarity,
-    strip_doi_punctuation, RELEVANCE_THRESHOLD,
+    RELEVANCE_THRESHOLD,
+    calculate_similarity,
+    normalize_ligatures,
+    normalize_quotes,
+    strip_doi_punctuation,
 )
 
 load_dotenv()
 pyalex.config.email = os.getenv("OPENALEX_EMAIL")
+pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
+
+
+def _execute_with_retry(func: Callable, *args, **kwargs) -> Any:
+    """Executes a pyalex function with exponential backoff for 429 errors."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "429" in err_msg or "too many requests" in err_msg:
+                wait_time = (2**attempt) + 1
+                print(
+                    f"  [DEBUG] OpenAlex Rate Limit (429). Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})"
+                )
+                time.sleep(wait_time)
+            else:
+                raise e
+    # Final attempt after retries
+    return func(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _process_work(work: dict) -> Optional[dict]:
     """Convert a raw OpenAlex work object into the standard result dict."""
     if work is None:
         return None
 
-    work_title = work.get('title', 'N/A')
+    work_title = work.get("title", "N/A")
 
     # Authors (up to 3 + "et al.")
-    authors = 'N/A'
-    authorships = work.get('authorships', [])
+    authors = "N/A"
+    authorships = work.get("authorships", [])
     if authorships:
         names = []
         for auth in authorships[:3]:
             if auth and isinstance(auth, dict):
-                author = auth.get('author')
+                author = auth.get("author")
                 if author and isinstance(author, dict):
-                    name = author.get('display_name', '')
+                    name = author.get("display_name", "")
                     if name:
                         names.append(name)
         if names:
-            authors = ', '.join(names)
+            authors = ", ".join(names)
             if len(authorships) > 3:
-                authors += ', et al.'
+                authors += ", et al."
 
     # Publication year
-    pub_year = work.get('publication_year', 'N/A')
+    pub_year = work.get("publication_year", "N/A")
 
     # Venue
-    venue = 'N/A'
-    loc = work.get('primary_location')
+    venue = "N/A"
+    loc = work.get("primary_location")
     if loc and isinstance(loc, dict):
-        source = loc.get('source')
+        source = loc.get("source")
         if source and isinstance(source, dict):
-            venue = source.get('display_name', 'N/A')
+            venue = source.get("display_name", "N/A")
 
     # URL — prefer DOI, fall back to OpenAlex ID
-    doi = work.get('doi')
-    url = doi if doi else work.get('id', '#')
+    doi = work.get("doi")
+    url = doi if doi else work.get("id", "#")
 
     return {
         "status": "found",
         "source": "OpenAlex",
         "title": work_title,
         "author": authors,
-        "pub_year": str(pub_year) if pub_year != 'N/A' else 'N/A',
+        "pub_year": str(pub_year) if pub_year != "N/A" else "N/A",
         "venue": venue,
         "url": url,
     }
@@ -76,12 +105,13 @@ def _process_work(work: dict) -> Optional[dict]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def lookup_by_doi(doi: str) -> dict:
     """Fetch a work from OpenAlex by its DOI."""
     try:
         doi_query = strip_doi_punctuation(doi)
         print(f"  OpenAlex DOI lookup: {doi_query}...")
-        work = Works()[doi_query]
+        work = _execute_with_retry(lambda: Works()[doi_query])
         if work:
             res = _process_work(work)
             if res:
@@ -103,18 +133,20 @@ def lookup_by_title(title: str) -> dict:
         clean = normalize_quotes(title)
         clean = normalize_ligatures(clean)
         # Remove colons, semicolons, and common trailing punctuation for the search query
-        query = re.sub(r'[:;.,!?]', ' ', clean).strip()
-        
+        query = re.sub(r"[:;.,!?]", " ", clean).strip()
+
         print(f"  OpenAlex title search: {query[:70]}...")
-        results = Works().search(query).get()
-        
+        results = _execute_with_retry(lambda: Works().search(query).get())
+
         if not results:
             # Fallback: Search with only the first ~8 words (often more robust for long titles)
             words = query.split()
             if len(words) > 10:
                 short_query = " ".join(words[:8])
-                print(f"  → No results for full title. Trying fallback: {short_query}...")
-                results = Works().search(short_query).get()
+                print(
+                    f"  → No results for full title. Trying fallback: {short_query}..."
+                )
+                results = _execute_with_retry(lambda: Works().search(short_query).get())
 
         if results:
             res = _process_work(results[0])
@@ -122,13 +154,17 @@ def lookup_by_title(title: str) -> dict:
                 # Pre-acceptance relevance gate: reject obviously wrong matches.
                 # OpenAlex always returns *something* even when the paper isn't indexed.
                 # If the returned title is too dissimilar from our query, treat as not found.
-                relevance = calculate_similarity(title, res['title'])
+                relevance = calculate_similarity(title, res["title"])
                 if relevance < RELEVANCE_THRESHOLD:
-                    print(f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < {RELEVANCE_THRESHOLD}): '{res['title'][:60]}'")
+                    print(
+                        f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < {RELEVANCE_THRESHOLD}): '{res['title'][:60]}'"
+                    )
                     return {"status": "not_found"}
-                print(f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}...")
+                print(
+                    f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}..."
+                )
                 return res
-        
+
         print("  - Not found in OpenAlex by title")
         return {"status": "not_found"}
     except Exception as e:
