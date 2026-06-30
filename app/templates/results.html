@@ -55,38 +55,41 @@
                           <span class="badge bg-danger">Not Found</span>
                        {% endif %}
                   </td>
-                 <td class="text-center">
-                     {% if item.check.status == 'found' %}
-                         {% if item.check.source == 'OpenAlex' %}
-                             <span class="badge bg-primary">OpenAlex</span>
-                         {% elif item.check.source == 'Crossref' %}
-                             <span class="badge bg-info">Crossref</span>
-                         {% elif item.check.source == 'DataCite' %}
-                             <span class="badge bg-success">DataCite</span>
-                         {% elif item.check.source == 'arXiv' %}
-                             <span class="badge bg-dark">arXiv</span>
-                         {% else %}
-                             <span class="badge bg-secondary">{{ item.check.source }}</span>
-                         {% endif %}
-                     {% else %}
-                         <span class="text-muted">—</span>
-                     {% endif %}
-                 </td>
+                  <td class="text-center">
+                      {% if item.check.status == 'found' or item.check.status == 'candidate' %}
+                          {% if item.check.source == 'OpenAlex' %}
+                              <span class="badge bg-primary">OpenAlex</span>
+                          {% elif item.check.source == 'Crossref' %}
+                              <span class="badge bg-info">Crossref</span>
+                          {% elif item.check.source == 'DataCite' %}
+                              <span class="badge bg-success">DataCite</span>
+                          {% elif item.check.source == 'arXiv' %}
+                              <span class="badge bg-dark">arXiv</span>
+                          {% else %}
+                              <span class="badge bg-secondary">{{ item.check.source }}</span>
+                          {% endif %}
+                      {% else %}
+                          <span class="text-muted">—</span>
+                      {% endif %}
+                  </td>
                  <td class="small">
-                     {% if item.check.status == 'found' %}
-                         {% if item.check.url and item.check.url != '#' %}
-                             <strong><a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer">{{ item.check.title }}</a></strong><br>
-                         {% else %}
-                             <strong>{{ item.check.title }}</strong><br>
-                         {% endif %}
-                         <em>{{ item.check.author }}</em><br>
-                         {{ item.check.venue }} ({{ item.check.pub_year }})<br>
-                         <div class="d-flex justify-content-between align-items-center mt-1">
-                             {% if item.check.url and item.check.url != '#' %}
-                                 <a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>
-                             {% else %}
-                                 <span></span>
-                             {% endif %}
+                      {% if item.check.status == 'found' or item.check.status == 'candidate' %}
+                          {% if item.check.url and item.check.url != '#' %}
+                              <strong><a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer">{{ item.check.title }}</a></strong><br>
+                          {% else %}
+                              <strong>{{ item.check.title }}</strong><br>
+                          {% endif %}
+                          <em>{{ item.check.author }}</em><br>
+                          {{ item.check.venue }} ({{ item.check.pub_year }})<br>
+                          <div class="d-flex justify-content-between align-items-center mt-1">
+                              {% if item.check.url and item.check.url != '#' %}
+                                  <a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>
+                              {% else %}
+                                  <span></span>
+                              {% endif %}
+                              {% if item.check.status == 'candidate' %}
+                                  <span class="badge bg-light text-dark border border-info small">Web Suggestion</span>
+                              {% endif %}
                               <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}bg-light text-dark border-warning{% else %}text-danger border-danger{% endif %} small" style="{% if item.check.similarity >= 0.6 and item.check.similarity < 0.8 %}color: #fd7e14 !important; border-color: #fd7e14 !important;{% endif %}">
                                   Similarity: {{ (item.check.similarity * 100)|round|int }}%
                               </span>
@@ -98,10 +101,10 @@
                           {% endif %}
                           {% if item.check.similarity < 0.6 and item.check.status != 'candidate' %}
                           <div class="text-danger mt-1" style="font-size: 0.75rem;">
-                              <strong>Caution:</strong> Found reference title differs significantly from extracted text.
+                               <strong>Caution:</strong> Found reference title differs significantly from extracted text.
                           </div>
                           {% endif %}
-                     {% elif item.check.status == 'error' %}
+                      {% elif item.check.status == 'error' %}
                          <span style="color: #fd7e14 !important;"><strong>Error occurred:</strong> {{ item.check.message }}</span>
                      {% elif item.check.status == 'skipped' %}
                          <span class="text-muted">{{ item.check.reason }}</span>
