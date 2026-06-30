@@ -179,6 +179,10 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     # If we have a very strong match, try to verify the page
     if best_score >= TITLE_SIMILARITY_THRESHOLD:
         url = best_res.get("href", "")
+        # Ensure URL is valid before returning
+        if not url or not url.startswith(('http://', 'https://')):
+            # If URL is invalid, try to find a better alternative or return not_found
+            return {"status": "not_found"}
         if _verify_page(url, title):
             return {
                 "status": "found",
@@ -192,6 +196,10 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
             }
         else:
             # Even if verification fails, if it's a good match, it's a candidate
+            url = best_res.get("href", "")
+            if not url or not url.startswith(('http://', 'https://')):
+                # If URL is invalid, don't return a candidate
+                return {"status": "not_found"}
             return {
                 "status": "candidate",
                 "source": "Web Search",
@@ -203,13 +211,17 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                 "similarity": best_score
             }
 
-    # If score is decent, return as candidate
+    # If score is decent, return as candidate - ensure URL exists
     if best_score >= 0.4:
+        url = best_res.get("href", "")
+        if not url or not url.startswith(('http://', 'https://')):
+            # If URL is invalid, return not_found instead of a candidate
+            return {"status": "not_found"}
         return {
             "status": "candidate",
             "source": "Web Search",
             "title": best_res.get("title", title),
-            "url": best_res.get("href", ""),
+            "url": url,
             "venue": "Web Page (Candidate)",
             "author": "Unknown",
             "pub_year": "Unknown",
