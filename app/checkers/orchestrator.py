@@ -97,7 +97,17 @@ def check_reference(ref_text: str) -> dict:
 
         # --- Step 3: arXiv ---
         if not result or result["status"] != "found":
-            arxiv_id = extract_arxiv_id(ref_text)
+            # Extract URLs (including arXiv IDs) from the reference
+            urls = extract_urls_from_reference(ref_text)
+            arxiv_id = None
+            for url in urls:
+                # Simple check to see if it's an arXiv URL
+                if 'arxiv.org' in url:
+                    # Extract the arXiv ID from the URL (e.g., https://arxiv.org/abs/2301.12345)
+                    arxiv_match = re.search(r'arxiv\.org/(?:abs/|pdf/)?(\d{4}\.\d{4,5}(v\d+)?)', url)
+                    if arxiv_match:
+                        arxiv_id = arxiv_match.group(1)
+                        break
             if arxiv_id:
                 print(f"  → Found arXiv ID: {arxiv_id}")
                 result = arxiv_backend.lookup_by_id(arxiv_id)

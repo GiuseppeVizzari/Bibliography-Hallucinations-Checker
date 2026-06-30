@@ -60,7 +60,17 @@ def index():
                         doi_clean = strip_doi_punctuation(doi)
                         original_url = f"https://doi.org/{doi_clean}"
                     else:
-                        arxiv_id = extract_arxiv_id(ref)
+                        # Extract URLs (including arXiv IDs) from the reference
+                        urls = extract_urls_from_reference(ref)
+                        arxiv_id = None
+                        for url in urls:
+                            # Simple check to see if it's an arXiv URL
+                            if 'arxiv.org' in url:
+                                # Extract the arXiv ID from the URL (e.g., https://arxiv.org/abs/2301.12345)
+                                arxiv_match = re.search(r'arxiv\.org/(?:abs/|pdf/)?(\d{4}\.\d{4,5}(v\d+)?)', url)
+                                if arxiv_match:
+                                    arxiv_id = arxiv_match.group(1)
+                                    break
                         if arxiv_id:
                             original_url = f"https://arxiv.org/abs/{arxiv_id}"
                         else:
