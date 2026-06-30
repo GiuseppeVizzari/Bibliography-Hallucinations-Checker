@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from ddgs import DDGS
 
 from ..normalizer import calculate_similarity
+from ..extraction import extract_urls_from_reference
 
 # Confidence threshold to mark a web result as 'found'
 TITLE_SIMILARITY_THRESHOLD = 0.75
