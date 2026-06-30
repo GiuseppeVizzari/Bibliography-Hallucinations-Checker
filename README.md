@@ -10,11 +10,12 @@ A Flask web application that extracts bibliographic references from PDFs and ver
 pip install -r requirements.txt
 ```
 
-### 2. Configure Your Email (Optional)
-The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polite pool"), add your email to the `.env` file:
+### 2. Configure OpenAlex (Optional)
+The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polito pool"), add your email and API key to the `.env` file:
 
 ```env
 OPENALEX_EMAIL=your-email@example.com
+OPENALEX_API_KEY=your-api-key
 ```
 
 ### 3. Run the Application
@@ -80,7 +81,7 @@ Each reference is checked in priority order:
 | 1 | DOI lookup | OpenAlex → Crossref / DataCite | Zenodo DOIs (10.5281) route to DataCite first |
 | 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping/spaces |
 | 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
-| 4 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to general web search if no match or similarity < 0.6 |
+| 4 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to DuckDuckGo web search if no match or similarity < 0.6 |
 | 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
 
 ### 7. Similarity Scoring
@@ -123,7 +124,7 @@ app/
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
-- ✅ **Detailed Metadata**: Extracts Title, Authors, Year, and Venue for each verified reference.
+- ✅ **Improved Visibility**: Updated UI colors (orange vs white) for better legibility of similarity scores and status badges.
 - ✅ **No API Keys Required**: Uses open scholarly APIs.
 - ✅ **Web Search Fallback**: For references not found in academic APIs, the app performs a targeted web search and similarity analysis on page titles.
 - ✅ **Intelligent Fallback**: Automatically triggers web search if academic results are found but have low similarity (< 60%), preventing false positives from blocking discovery.

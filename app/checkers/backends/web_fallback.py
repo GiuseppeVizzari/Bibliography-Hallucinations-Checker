@@ -78,16 +78,34 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                 # Basic snippet check to avoid unnecessary requests
                 if target_title_in_snippet(title, snippet):
                     # Thorough verification by visiting the page
-                    if _verify_page(url, title):
-                        return {
-                            "status": "found",
-                            "source": "Web Search",
-                            "title": title,
-                            "url": url,
-                            "venue": "Web Page",
-                            "author": "Unknown",
-                            "pub_year": "Unknown",
-                        }
+                    # We try to verify, but if it fails or returns False, 
+                    # we still return the result because the snippet match was promising.
+                    try:
+                        if _verify_page(url, title):
+                            # Strong match found on page
+                            return {
+                                "status": "found",
+                                "source": "Web Search",
+                                "title": title,
+                                "url": url,
+                                "venue": "Web Page",
+                                "author": "Unknown",
+                                "pub_year": "Unknown",
+                            }
+                    except Exception as e:
+                        print(f"  [DEBUG] Page verification error for {url}: {e}")
+                    
+                    # Fallback: Snippet was good, but page verification failed or errored.
+                    # Still return it so the user has the link to investigate.
+                    return {
+                        "status": "found",
+                        "source": "Web Search",
+                        "title": title,
+                        "url": url,
+                        "venue": "Web Page",
+                        "author": "Unknown",
+                        "pub_year": "Unknown",
+                    }
     except Exception as e:
         print(f"  [DEBUG] Web search error: {e}")
     except Exception as e:

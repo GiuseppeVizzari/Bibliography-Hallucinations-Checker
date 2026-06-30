@@ -8,105 +8,106 @@
 </div>
 
 <div class="alert alert-info">
-    <strong>Processed {{ total_count }} references</strong> using OpenAlex.
+    <strong>Processed {{ total_count }} references</strong> using multiple verification sources.
 </div>
 
 <div class="table-responsive">
     <table class="table table-bordered table-hover">
-        <thead class="table-light">
+        <thead>
             <tr>
-                <th style="width: 5%">#</th>
-                <th style="width: 35%">Extracted Reference</th>
-                <th style="width: 8%">Status</th>
-                <th style="width: 12%">Source</th>
-                <th style="width: 40%">Online Data</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in results %}
-            <tr {% if item.check.status == 'found' and item.check.similarity < 0.6 %}class="table-warning"{% endif %}>
-                <td class="text-center"><strong>{{ item.number }}</strong></td>
-                <td class="small">
-                    {{ item.original }}
-                    {% if item.original_url %}
-                    <div class="mt-1">
-                        <a href="{{ item.original_url }}" target="_blank" rel="noopener noreferrer"
-                           class="badge bg-light text-secondary border text-decoration-none"
-                           style="font-size: 0.7rem;">
-                            🔗 Source
-                        </a>
-                    </div>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    {% if item.check.status == 'found' %}
-                        {% if item.check.similarity >= 0.6 %}
-                            <span class="badge bg-success">Found</span>
-                        {% else %}
-                            <span class="badge bg-warning text-dark">Check Match</span>
-                        {% endif %}
-                    {% elif item.check.status == 'skipped' %}
-                        <span class="badge bg-secondary">Skipped</span>
-                    {% elif item.check.status == 'error' %}
-                        <span class="badge bg-warning">Error</span>
-                    {% else %}
-                        <span class="badge bg-danger">Not Found</span>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    {% if item.check.status == 'found' %}
-                        {% if item.check.source == 'OpenAlex' %}
-                            <span class="badge bg-primary">OpenAlex</span>
-                        {% elif item.check.source == 'Crossref' %}
-                            <span class="badge bg-info">Crossref</span>
-                        {% elif item.check.source == 'DataCite' %}
-                            <span class="badge bg-success">DataCite</span>
-                        {% elif item.check.source == 'arXiv' %}
-                            <span class="badge bg-dark">arXiv</span>
-                        {% else %}
-                            <span class="badge bg-secondary">{{ item.check.source }}</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td class="small">
-                    {% if item.check.status == 'found' %}
-                        {% if item.check.url and item.check.url != '#' %}
-                            <strong><a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer">{{ item.check.title }}</a></strong><br>
-                        {% else %}
-                            <strong>{{ item.check.title }}</strong><br>
-                        {% endif %}
-                        <em>{{ item.check.author }}</em><br>
-                        {{ item.check.venue }} ({{ item.check.pub_year }})<br>
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            {% if item.check.url and item.check.url != '#' %}
-                            <a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>
-                            {% else %}
-                            <span></span>
-                            {% endif %}
-                            <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}text-warning border-warning{% else %}text-danger border-danger{% endif %} small">
-                                Similarity: {{ (item.check.similarity * 100)|round|int }}%
-                            </span>
-                        </div>
-                        {% if item.check.similarity < 0.6 %}
-                        <div class="text-danger mt-1" style="font-size: 0.75rem;">
-                            <strong>Caution:</strong> Found reference title differs significantly from extracted text.
-                        </div>
-                        {% endif %}
-                    {% elif item.check.status == 'error' %}
-                        <span class="text-warning"><strong>Error occurred:</strong> {{ item.check.message }}</span>
-                    {% elif item.check.status == 'skipped' %}
-                        <span class="text-muted">{{ item.check.reason }}</span>
-                    {% else %}
-                        <span class="text-muted">No match found in OpenAlex, Crossref, DataCite, or arXiv.</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+                <th style="width: 4%">#</th>
+                 <th style="width: 26%">Extracted Reference</th>
+                 <th style="width: 10%">Status</th>
+                 <th style="width: 10%">Source</th>
+                 <th style="width: 50%">Online Data</th>
+             </tr>
+         </thead>
+         <tbody>
+             {% for item in results %}
+             <tr {% if item.check.status == 'found' and item.check.similarity < 0.6 %}style="background-color: #fd7e14 !important;"{% endif %}>
+                 <td class="text-center"><strong>{{ item.number }}</strong></td>
+                 <td class="small">
+                     {{ item.original }}
+                     {% if item.original_url %}
+                     <div class="mt-1">
+                         <a href="{{ item.original_url }}" target="_blank" rel="noopener noreferrer"
+                            class="badge bg-light text-secondary border text-decoration-none"
+                            style="font-size: 0.75rem;">
+                             🔗 Source
+                         </a>
+                     </div>
+                     {% endif %}
+                 </td>
+                 <td class="text-center">
+                     {% if item.check.status == 'found' %}
+                         {% if item.check.similarity >= 0.6 %}
+                             <span class="badge bg-success">Found</span>
+                         {% else %}
+                             <span class="badge" style="background-color: #fd7e14 !important; color: white !important;">Check Match</span>
+                         {% endif %}
+                     {% elif item.check.status == 'skipped' %}
+                         <span class="badge bg-secondary">Skipped</span>
+                     {% elif item.check.status == 'error' %}
+                         <span class="badge" style="background-color: #fd7e14 !important;">Error</span>
+                     {% else %}
+                         <span class="badge bg-danger">Not Found</span>
+                     {% endif %}
+                 </td>
+                 <td class="text-center">
+                     {% if item.check.status == 'found' %}
+                         {% if item.check.source == 'OpenAlex' %}
+                             <span class="badge bg-primary">OpenAlex</span>
+                         {% elif item.check.source == 'Crossref' %}
+                             <span class="badge bg-info">Crossref</span>
+                         {% elif item.check.source == 'DataCite' %}
+                             <span class="badge bg-success">DataCite</span>
+                         {% elif item.check.source == 'arXiv' %}
+                             <span class="badge bg-dark">arXiv</span>
+                         {% else %}
+                             <span class="badge bg-secondary">{{ item.check.source }}</span>
+                         {% endif %}
+                     {% else %}
+                         <span class="text-muted">—</span>
+                     {% endif %}
+                 </td>
+                 <td class="small">
+                     {% if item.check.status == 'found' %}
+                         {% if item.check.url and item.check.url != '#' %}
+                             <strong><a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer">{{ item.check.title }}</a></strong><br>
+                         {% else %}
+                             <strong>{{ item.check.title }}</strong><br>
+                         {% endif %}
+                         <em>{{ item.check.author }}</em><br>
+                         {{ item.check.venue }} ({{ item.check.pub_year }})<br>
+                         <div class="d-flex justify-content-between align-items-center mt-1">
+                             {% if item.check.url and item.check.url != '#' %}
+                                 <a href="{{ item.check.url }}" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>
+                             {% else %}
+                                 <span></span>
+                             {% endif %}
+                              <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}bg-light text-dark border-warning{% else %}text-danger border-danger{% endif %} small" style="{% if item.check.similarity >= 0.6 and item.check.similarity < 0.8 %}color: #fd7e14 !important; border-color: #fd7e14 !important;{% endif %}">
+                                 Similarity: {{ (item.check.similarity * 100)|round|int }}%
+                             </span>
+                         </div>
+                         {% if item.check.similarity < 0.6 %}
+                         <div class="text-danger mt-1" style="font-size: 0.75rem;">
+                             <strong>Caution:</strong> Found reference title differs significantly from extracted text.
+                         </div>
+                         {% endif %}
+                     {% elif item.check.status == 'error' %}
+                         <span style="color: #fd7e14 !important;"><strong>Error occurred:</strong> {{ item.check.message }}</span>
+                     {% elif item.check.status == 'skipped' %}
+                         <span class="text-muted">{{ item.check.reason }}</span>
+                     {% else %}
+                         <span class="text-muted">No match found across available verification sources.</span>
+                     {% endif %}
+                 </td>
+             </tr>
+             {% endfor %}
+         </tbody>
+     </table>
+     </div>
+
 
 {# ── Back to top button ── #}
 <a href="#" id="back-to-top"
