@@ -67,7 +67,7 @@ def check_reference(ref_text: str) -> dict:
         }
     """
     if not ref_text or len(ref_text) < 10:
-        return {"status": "skipped", "reason": "Too short"}
+        return {"status": "skipped", "reason": "Too short", "similarity": 0.0}
 
     print(f"\n[DEBUG] Checking reference...")
     print(f"  Original: {ref_text[:100]}...")
@@ -128,16 +128,21 @@ def check_reference(ref_text: str) -> dict:
 
     except Exception as e:
         print(f"  - Unexpected error in verification pipeline: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "similarity": 0.0}
 
     # Similarity scoring
-    if result and result.get("status") == "found":
-        fetched_title = result.get("title", "")
-        similarity = calculate_similarity(extracted_title, fetched_title)
-        result["similarity"] = similarity
-        print(f"  [DEBUG] Similarity comparison:")
-        print(f"  [DEBUG]   Extracted title: '{extracted_title}'")
-        print(f"  [DEBUG]   Fetched title:   '{fetched_title}'")
-        print(f"  [DEBUG]   Score: {similarity:.2f}")
+    if result is not None:
+        if result.get("status") == "found":
+            fetched_title = result.get("title", "")
+            similarity = calculate_similarity(extracted_title, fetched_title)
+            result["similarity"] = similarity
+            print(f"  [DEBUG] Similarity comparison:")
+            print(f"  [DEBUG]   Extracted title: '{extracted_title}'")
+            print(f"  [DEBUG]   Fetched title:   '{fetched_title}'")
+            print(f"  [DEBUG]   Score: {similarity:.2f}")
+        else:
+            result["similarity"] = 0.0
+    else:
+        result = {"status": "not_found", "similarity": 0.0}
 
     return result

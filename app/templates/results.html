@@ -24,7 +24,7 @@
          </thead>
          <tbody>
              {% for item in results %}
-             <tr {% if item.check.status == 'found' and item.check.similarity < 0.6 %}style="background-color: #fd7e14 !important;"{% endif %}>
+              <tr {% if item.check.status == 'found' and item.check.similarity|default(0) < 0.6 %}style="background-color: #fd7e14 !important;"{% endif %}>
                  <td class="text-center"><strong>{{ item.number }}</strong></td>
                  <td class="small">
                      {{ item.original }}
@@ -40,11 +40,11 @@
                  </td>
                   <td class="text-center">
                       {% if item.check.status == 'found' %}
-                          {% if item.check.similarity >= 0.6 %}
-                              <span class="badge bg-success">Found</span>
-                          {% else %}
-                              <span class="badge" style="background-color: #fd7e14 !important; color: white !important;">Check Match</span>
-                          {% endif %}
+                           {% if item.check.similarity|default(0) >= 0.6 %}
+                               <span class="badge bg-success">Found</span>
+                           {% else %}
+                               <span class="badge" style="background-color: #fd7e14 !important; color: white !important;">Check Match</span>
+                           {% endif %}
                       {% elif item.check.status == 'candidate' %}
                           <span class="badge bg-info">Candidate</span>
                       {% elif item.check.status == 'skipped' %}
@@ -90,20 +90,20 @@
                               {% if item.check.status == 'candidate' %}
                                   <span class="badge bg-light text-dark border border-info small">Web Suggestion</span>
                               {% endif %}
-                              <span class="badge border {% if item.check.similarity >= 0.8 %}text-success border-success{% elif item.check.similarity >= 0.6 %}bg-light text-dark border-warning{% else %}text-danger border-danger{% endif %} small" style="{% if item.check.similarity >= 0.6 and item.check.similarity < 0.8 %}color: #fd7e14 !important; border-color: #fd7e14 !important;{% endif %}">
-                                  Similarity: {{ (item.check.similarity * 100)|round|int }}%
-                              </span>
-                          </div>
-                          {% if item.check.status == 'candidate' %}
-                          <div class="text-info mt-1" style="font-size: 0.75rem;">
-                               <strong>Suggestion:</strong> Check this link manually.
-                          </div>
-                          {% endif %}
-                          {% if item.check.similarity < 0.6 and item.check.status != 'candidate' %}
-                          <div class="text-danger mt-1" style="font-size: 0.75rem;">
-                               <strong>Caution:</strong> Found reference title differs significantly from extracted text.
-                          </div>
-                          {% endif %}
+                               <span class="badge border {% if item.check.similarity|default(0) >= 0.8 %}text-success border-success{% elif item.check.similarity|default(0) >= 0.6 %}bg-light text-dark border-warning{% else %}text-danger border-danger{% endif %} small" style="{% if item.check.similarity|default(0) >= 0.6 and item.check.similarity|default(0) < 0.8 %}color: #fd7e14 !important; border-color: #fd7e14 !important;{% endif %}">
+                                   Similarity: {{ (item.check.similarity|default(0) * 100)|round|int }}%
+                                </span>
+                             </div>
+                             {% if item.check.status == 'candidate' %}
+                             <div class="text-info mt-1" style="font-size: 0.75rem;">
+                                  <strong>Suggestion:</strong> Check this link manually.
+                             </div>
+                             {% endif %}
+                             {% if item.check.similarity|default(0) < 0.6 and item.check.status != 'candidate' %}
+                             <div class="text-danger mt-1" style="font-size: 0.75rem;">
+                                  <strong>Caution:</strong> Found reference title differs significantly from extracted text.
+                             </div>
+                             {% endif %}
                       {% elif item.check.status == 'error' %}
                          <span style="color: #fd7e14 !important;"><strong>Error occurred:</strong> {{ item.check.message }}</span>
                      {% elif item.check.status == 'skipped' %}
