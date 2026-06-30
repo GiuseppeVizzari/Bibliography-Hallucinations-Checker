@@ -54,6 +54,8 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     """
     Searches the web for the given title.
     If found and verified, returns a result dict.
+    If no matches pass snippet check but search results exist, 
+    returns the first result as a 'candidate'.
     """
     if not title:
         return {"status": "not_found"}
@@ -77,12 +79,8 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
 
                 # Basic snippet check to avoid unnecessary requests
                 if target_title_in_snippet(title, snippet):
-                    # Thorough verification by visiting the page
-                    # We try to verify, but if it fails or returns False, 
-                    # we still return the result because the snippet match was promising.
                     try:
                         if _verify_page(url, title):
-                            # Strong match found on page
                             return {
                                 "status": "found",
                                 "source": "Web Search",
@@ -95,8 +93,6 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                     except Exception as e:
                         print(f"  [DEBUG] Page verification error for {url}: {e}")
                     
-                    # Fallback: Snippet was good, but page verification failed or errored.
-                    # Still return it so the user has the link to investigate.
                     return {
                         "status": "found",
                         "source": "Web Search",
@@ -106,16 +102,21 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                         "author": "Unknown",
                         "pub_year": "Unknown",
                     }
+
+            # If we reached here, results were found but none passed the snippet check.
+            if results:
+                first = results[0]
+                return {
+                    "status": "candidate",
+                    "source": "Web Search",
+                    "title": first.get("title", title),
+                    "url": first.get("href", ""),
+                    "venue": "Web Page (Candidate)",
+                    "author": "Unknown",
+                    "pub_year": "Unknown",
+                }
+
     except Exception as e:
-        print(f"  [DEBUG] Web search error: {e}")
-    except Exception as e:
-        print(f"  [DEBUG] Web search error: {e}")
-    except Exception as e:
-        print(f"  [DEBUG] Web search error: {e}")
-        print(f"  [DEBUG] Web search error: {e}")
-    except Exception as e:
-        print(f"  [DEBUG] Web search error: {e}")
-        print(f"  [DEBUG] Web search error: {e}")
         print(f"  [DEBUG] Web search error: {e}")
 
     return {"status": "not_found"}
