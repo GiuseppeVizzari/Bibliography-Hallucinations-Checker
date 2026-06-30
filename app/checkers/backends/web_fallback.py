@@ -128,6 +128,7 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=5))
             if not results:
+                # Fallback to a more general search if quoted search returns no results
                 results = list(ddgs.text(title, max_results=5))
     except Exception as e:
         print(f"  [DEBUG] Web search error: {e}")
@@ -147,10 +148,22 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
         score = calculate_similarity(title, res_title)
 
         # Boost score if the title is contained in the snippet or the result title is in the target title
+        # This boost is important for finding exact matches even if there's some variation in titles
         if (snippet and title.lower() in snippet.lower()) or (
             res_title and res_title.lower() in title.lower()
         ):
             score = max(score, 0.8)
+
+        # Additional boost for exact title matches or when the result title contains parts of the target title
+        # This helps with cases where search engines return very similar titles but not exact matches
+        if res_title and (title.lower() in res_title.lower() or 
+                          (len(title) > 10 and len(res_title) > 10 and 
+                           any(word in res_title.lower() for word in title.lower().split()))):
+            score = max(score, 0.85)
+            
+        # Even more aggressive boost for very similar titles (within 10% difference in length)
+        if res_title and abs(len(title) - len(res_title)) < len(title) * 0.1:
+            score = max(score, 0.9)
 
         ranked_results.append((score, res))
 
