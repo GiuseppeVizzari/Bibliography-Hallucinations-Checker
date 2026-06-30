@@ -121,6 +121,7 @@ app/
 - ✅ **Line Number Filtering**: Three-layer filter removes marginal and embedded line numbers that would otherwise corrupt reference text.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
 - ✅ **Five-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, and direct URL resource fetching.
+- ✅ **Partial ARXIV Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
@@ -174,3 +175,4 @@ This project is built using several powerful open-source libraries and APIs:
 - **[beautifulsoup4](https://www.beautifulsoup.com/)**: For parsing HTML content during web fallback.
 - **[duckduckgo-search (ddgs)](https://pypi.org/project/duckduckgo-search/)**: For performing privacy-respecting web searches without an API key.
 - **URL Extraction**: Enhanced reference parsing to extract and utilize direct URLs (e.g., DOIs, arXiv IDs) found in the original text before resorting to web search.
+- **Partial ARXIV Identifiers**: Added support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").

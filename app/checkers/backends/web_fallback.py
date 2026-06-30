@@ -7,7 +7,7 @@ that are not indexed in academic databases (e.g. datasets, reports, news).
 
 import requests
 from bs4 import BeautifulSoup
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 from ..normalizer import calculate_similarity
 from ..extraction import extract_urls_from_reference

@@ -12,6 +12,7 @@ Lookup priority:
 Similarity scoring is applied to every result to help the UI flag
 likely hallucinations.
 """
+import re
 from .extraction import (
     extract_title_from_reference,
     extract_doi_info,
@@ -97,7 +98,7 @@ def check_reference(ref_text: str) -> dict:
 
         # --- Step 3: arXiv ---
         if not result or result["status"] != "found":
-            # Extract URLs (including arXiv IDs) from the reference
+            # First, try to extract arXiv IDs from URLs (as before)
             urls = extract_urls_from_reference(ref_text)
             arxiv_id = None
             for url in urls:
@@ -108,6 +109,20 @@ def check_reference(ref_text: str) -> dict:
                     if arxiv_match:
                         arxiv_id = arxiv_match.group(1)
                         break
+            
+            # If no URL-based arXiv ID found, check for partial identifiers in the text
+            if not arxiv_id:
+                # Look for "arXiv:" prefix followed by the identifier (e.g., "arXiv:2403.02221")
+                arxiv_match = re.search(r'arXiv:\s*(\d{4}\.\d{4,5}(v\d+)?)', ref_text, re.IGNORECASE)
+                if arxiv_match:
+                    arxiv_id = arxiv_match.group(1)
+                
+                # Look for "CoRR, abs/" (e.g., "CoRR, abs/1810.04805") 
+                if not arxiv_id:
+                    corr_match = re.search(r'CoRR,\s*abs/(\d{4}\.\d{4,5}(v\d+)?)', ref_text, re.IGNORECASE)
+                    if corr_match:
+                        arxiv_id = corr_match.group(1)
+            
             if arxiv_id:
                 print(f"  → Found arXiv ID: {arxiv_id}")
                 result = arxiv_backend.lookup_by_id(arxiv_id)
