@@ -16,7 +16,7 @@ from .extraction import (
     extract_title_from_reference,
     extract_doi_info,
     heal_doi,
-    extract_arxiv_id,
+    extract_urls_from_reference,
 )
 from .normalizer import calculate_similarity, strip_doi_punctuation
 from .backends import openalex, crossref, datacite, arxiv as arxiv_backend, url_checker, web_fallback
