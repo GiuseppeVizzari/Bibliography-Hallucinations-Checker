@@ -50,6 +50,55 @@ def _verify_page(url: str, target_title: str) -> bool:
         return False
 
 
+def _try_direct_url_verification(url: str, target_title: str) -> dict:
+    """
+    Attempts to verify a direct URL (DOI, arXiv) without web search.
+    Returns a result dict if successful, otherwise None.
+    """
+    try:
+        # If it's an arXiv URL or DOI, we can try to fetch and check the title directly
+        # This is a simplified check - in practice, you might want to do more sophisticated checks
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            # For arXiv, we might want to check the metadata from its API
+            # For DOIs, we can use the DOI content negotiation service
+            
+            # Check if page title matches closely
+            soup = BeautifulSoup(response.text, "html.parser")
+            page_title = soup.title.string.strip() if soup.title else ""
+            
+            # Simple check - if title is not empty and matches the target
+            if page_title:
+                similarity = calculate_similarity(target_title, page_title)
+                if similarity >= TITLE_SIMILARITY_THRESHOLD:
+                    return {
+                        "status": "found",
+                        "source": "Direct URL Check",
+                        "title": page_title,
+                        "url": url,
+                        "venue": "Web Page (Direct URL)",
+                        "author": "Unknown",
+                        "pub_year": "Unknown",
+                        "similarity": similarity
+                    }
+            # If title check failed but the URL is valid, return as candidate for further review
+            return {
+                "status": "candidate",
+                "source": "Direct URL Check",
+                "title": target_title,
+                "url": url,
+                "venue": "Web Page (Candidate - Direct URL)",
+                "author": "Unknown",
+                "pub_year": "Unknown",
+                "similarity": 0.0
+            }
+    except Exception as e:
+        # Log the exception for debugging if needed, but don't fail the process
+        print(f"  [DEBUG] Direct URL check failed for {url}: {e}")
+        pass
+    return None
+
+
 def lookup_by_title(title: str, full_ref: str = "") -> dict:
     """
     Searches the web for the given title.
@@ -59,6 +108,18 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     """
     if not title:
         return {"status": "not_found"}
+
+    # First, check if there are any URLs in the original reference that we can use directly
+    if full_ref:
+        urls = extract_urls_from_reference(full_ref)
+        for url in urls:
+            result = _try_direct_url_verification(url, title)
+            if result and result["status"] == "found":
+                return result
+            elif result and result["status"] == "candidate":
+                # If we found a URL but it's not a perfect match, we can still return it as candidate
+                # Let the web search logic below handle further refinement if needed or use this result for display
+                pass  # Continue to web search logic below, but don't return here yet
 
     query = f'"{title}"'
     results = []
@@ -113,6 +174,7 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                 "venue": "Web Page",
                 "author": "Unknown",
                 "pub_year": "Unknown",
+                "similarity": best_score
             }
         else:
             # Even if verification fails, if it's a good match, it's a candidate
@@ -124,6 +186,7 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                 "venue": "Web Page (Candidate)",
                 "author": "Unknown",
                 "pub_year": "Unknown",
+                "similarity": best_score
             }
 
     # If score is decent, return as candidate
@@ -136,6 +199,7 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
             "venue": "Web Page (Candidate)",
             "author": "Unknown",
             "pub_year": "Unknown",
+            "similarity": best_score
         }
 
     return {"status": "not_found"}

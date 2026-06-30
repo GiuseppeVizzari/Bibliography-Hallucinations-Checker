@@ -272,21 +272,35 @@ def heal_doi(base_doi: str, end_pos: int, ref_text: str):
     return None, 0
 
 
-def extract_arxiv_id(ref_text: str):
+def extract_urls_from_reference(ref_text: str) -> list:
     """
-    Extracts an arXiv paper ID from a reference string.
+    Extracts all URLs found in the reference text.
+    This includes DOIs, arXiv links, and other web URLs.
     """
-    match = re.search(
-        r'arxiv:?\s*([a-z-]+(?:\.[a-z-]+)?/)?(\d{4}\.\d{4,5}(v\d+)?)',
-        ref_text, re.IGNORECASE
-    )
-    if match:
-        return match.group(2).strip()
-
-    match = re.search(
-        r'arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}(v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(v\d+)?)',
-        ref_text, re.IGNORECASE
-    )
-    if match:
-        return match.group(1).strip()
-    return None
+    urls = []
+    
+    # Extract DOI URLs (both http://dx.doi.org/... and https://doi.org/...)
+    doi_urls = _DOI_URL_RE.findall(ref_text)
+    urls.extend(doi_urls)
+    
+    # Extract bare DOIs (e.g., 10.1234/abcd.5678)
+    bare_dois = _BARE_DOI_RE.findall(ref_text)
+    urls.extend(bare_dois)
+    
+    # Extract arXiv URLs (both http://arxiv.org/... and https://arxiv.org/...)
+    arxiv_urls = _ARXIV_URL_RE.findall(ref_text)
+    urls.extend(arxiv_urls)
+    
+    # Extract any other URLs found (e.g., from full text like "URL: https://example.com")
+    all_urls = _URL_RE.findall(ref_text)
+    urls.extend(all_urls)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_urls = []
+    for url in urls:
+        if url not in seen:
+            seen.add(url)
+            unique_urls.append(url)
+    
+    return unique_urls
