@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, flash, redirect, current_
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
 from .checkers import check_reference
-from .checkers.extraction import extract_doi_info, extract_arxiv_id
+from .checkers.extraction import extract_doi_info, extract_urls_from_reference
 from .checkers.normalizer import strip_doi_punctuation
 
 bp = Blueprint('main', __name__)
