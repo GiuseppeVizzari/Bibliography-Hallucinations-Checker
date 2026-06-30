@@ -54,7 +54,7 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     """
     Searches the web for the given title.
     If found and verified, returns a result dict.
-    If no matches pass snippet check but search results exist, 
+    If no matches pass snippet check but search results exist,
     returns the best matching result as a 'candidate'.
     """
     if not title:
@@ -78,14 +78,28 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     ranked_results = []
     for res in results:
         url = res.get("href", "")
-        # Check title and body for similarity
-        text_to_check = res.get("title", "") + " " + res.get("body", "")
-        score = calculate_similarity(title, text_to_check)
+        res_title = res.get("title", "")
+        snippet = res.get("body", "")
+
+        # Primary score: similarity between target title and web result title
+        score = calculate_similarity(title, res_title)
+
+        # Boost score if the title is contained in the snippet or the result title is in the target title
+        if (snippet and title.lower() in snippet.lower()) or (
+            res_title and res_title.lower() in title.lower()
+        ):
+            score = max(score, 0.8)
+
         ranked_results.append((score, res))
 
     # Sort by score descending
     ranked_results.sort(key=lambda x: x[0], reverse=True)
     best_score, best_res = ranked_results[0]
+
+    # Additional debugging
+    print(
+        f"  [DEBUG] Web search best match: score={best_score:.2f}, title='{best_res.get('title')}'"
+    )
 
     # If we have a very strong match, try to verify the page
     if best_score >= TITLE_SIMILARITY_THRESHOLD:
@@ -111,10 +125,10 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
                 "author": "Unknown",
                 "pub_year": "Unknown",
             }
-    
+
     # If score is decent, return as candidate
     if best_score >= 0.4:
-         return {
+        return {
             "status": "candidate",
             "source": "Web Search",
             "title": best_res.get("title", title),

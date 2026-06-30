@@ -172,4 +172,4 @@ This project is built using several powerful open-source libraries and APIs:
 - **[python-dotenv](https://github.com/theskumar/python-dotenv)**: For managing environment variables securely.
 - **[Requests](https://requests.readthedocs.io/)**: To handle all API communications.
 - **[beautifulsoup4](https://www.beautifulsoup.com/)**: For parsing HTML content during web fallback.
-- **[duckduckgo-search](https://pypi.org/project/duckduckgo-search/)**: For performing privacy-respecting web searches without an API key.
+- **[duckduckgo-search (ddgs)](https://pypi.org/project/duckduckgo-search/)**: For performing privacy-respecting web searches without an API key.
