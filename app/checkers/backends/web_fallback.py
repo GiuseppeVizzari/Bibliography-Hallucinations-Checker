@@ -55,90 +55,73 @@ def lookup_by_title(title: str, full_ref: str = "") -> dict:
     Searches the web for the given title.
     If found and verified, returns a result dict.
     If no matches pass snippet check but search results exist, 
-    returns the first result as a 'candidate'.
+    returns the best matching result as a 'candidate'.
     """
     if not title:
         return {"status": "not_found"}
 
-    # Construct search query (quoted title for precision)
     query = f'"{title}"'
-
+    results = []
     try:
         with DDGS() as ddgs:
-            # Try quoted search first (high precision)
-            results = list(ddgs.text(query, max_results=3))
-
+            results = list(ddgs.text(query, max_results=5))
             if not results:
-                # Fallback to unquoted search (higher recall)
-                unquoted_query = title
-                results = list(ddgs.text(unquoted_query, max_results=3))
-
-            for res in results:
-                url = res.get("href", "")
-                snippet = res.get("body", "")
-
-                # Basic snippet check to avoid unnecessary requests
-                if target_title_in_snippet(title, snippet):
-                    try:
-                        if _verify_page(url, title):
-                            return {
-                                "status": "found",
-                                "source": "Web Search",
-                                "title": title,
-                                "url": url,
-                                "venue": "Web Page",
-                                "author": "Unknown",
-                                "pub_year": "Unknown",
-                            }
-                    except Exception as e:
-                        print(f"  [DEBUG] Page verification error for {url}: {e}")
-                    
-                    return {
-                        "status": "found",
-                        "source": "Web Search",
-                        "title": title,
-                        "url": url,
-                        "venue": "Web Page",
-                        "author": "Unknown",
-                        "pub_year": "Unknown",
-                    }
-
-            # If we reached here, results were found but none passed the snippet check.
-            if results:
-                first = results[0]
-                return {
-                    "status": "candidate",
-                    "source": "Web Search",
-                    "title": first.get("title", title),
-                    "url": first.get("href", ""),
-                    "venue": "Web Page (Candidate)",
-                    "author": "Unknown",
-                    "pub_year": "Unknown",
-                }
-
+                results = list(ddgs.text(title, max_results=5))
     except Exception as e:
         print(f"  [DEBUG] Web search error: {e}")
+        return {"status": "not_found"}
+
+    if not results:
+        return {"status": "not_found"}
+
+    # Rank results by similarity to the title
+    ranked_results = []
+    for res in results:
+        url = res.get("href", "")
+        # Check title and body for similarity
+        text_to_check = res.get("title", "") + " " + res.get("body", "")
+        score = calculate_similarity(title, text_to_check)
+        ranked_results.append((score, res))
+
+    # Sort by score descending
+    ranked_results.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_res = ranked_results[0]
+
+    # If we have a very strong match, try to verify the page
+    if best_score >= TITLE_SIMILARITY_THRESHOLD:
+        url = best_res.get("href", "")
+        if _verify_page(url, title):
+            return {
+                "status": "found",
+                "source": "Web Search",
+                "title": title,
+                "url": url,
+                "venue": "Web Page",
+                "author": "Unknown",
+                "pub_year": "Unknown",
+            }
+        else:
+            # Even if verification fails, if it's a good match, it's a candidate
+            return {
+                "status": "candidate",
+                "source": "Web Search",
+                "title": best_res.get("title", title),
+                "url": url,
+                "venue": "Web Page (Candidate)",
+                "author": "Unknown",
+                "pub_year": "Unknown",
+            }
+    
+    # If score is decent, return as candidate
+    if best_score >= 0.4:
+         return {
+            "status": "candidate",
+            "source": "Web Search",
+            "title": best_res.get("title", title),
+            "url": best_res.get("href", ""),
+            "venue": "Web Page (Candidate)",
+            "author": "Unknown",
+            "pub_year": "Unknown",
+        }
 
     return {"status": "not_found"}
-
-
-def target_title_in_snippet(title: str, snippet: str) -> bool:
-    """Returns True if the target title is reasonably present in the snippet."""
-    if not snippet:
-        return False
-
-    # Normalize both for a loose match
-    t_norm = title.lower().strip()
-    s_norm = snippet.lower()
-
-    # Check if title is in snippet (or a large part of it)
-    if t_norm in s_norm:
-        return True
-
-    # Fallback: check if most words of the title are present
-    title_words = [w for w in t_norm.split() if len(w) > 3]
-    if not title_words:
-        return False
-
-    matches = sum(1 for w in title_words if w in s_norm)
-    return (matches / len(title_words)) > 0.6
