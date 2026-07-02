@@ -4,11 +4,24 @@ A Flask web application that extracts bibliographic references from PDFs and ver
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Set up Virtual Environment
 
 ```bash
+# Create virtual environment (recommended)
+python -m venv .venv
+
+# Activate the virtual environment
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate  # On Windows
+
+# Install dependencies
 pip install -r requirements.txt
 ```
+
+The virtual environment approach is recommended because:
+1. It isolates dependencies from your system Python installation
+2. It prevents conflicts with other Python projects on your system
 
 ### 2. Configure OpenAlex (Optional)
 The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polito pool"), add your email and API key to the `.env` file:
@@ -82,7 +95,8 @@ Each reference is checked in priority order:
 | 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping/spaces |
 | 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
 | 4 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to DuckDuckGo web search if no match or similarity < 0.6 |
-| 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
+| 5 | Web fallback | DuckDuckGo + scraping | Web search with page-title verification for non-academic references |
+| 6 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, extracts `<title>`, compares against reference |
 
 ### 7. Similarity Scoring
 
@@ -103,13 +117,14 @@ app/
     ├── normalizer.py             # Unicode ligature decomposition, quote normalization, similarity
     │
     └── backends/
+        ├── __init__.py           # Exports all backend classes
+        ├── base.py               # BackendService base class
         ├── openalex.py           # OpenAlex API (DOI lookup + title search)
         ├── crossref.py           # Crossref API via habanero
         ├── datacite.py           # DataCite REST API
         ├── arxiv.py              # arXiv Atom feed API
-        ├── arxiv.py              # arXiv Atom feed API
-        └── url_checker.py        # Direct URL fetcher (HTML/PDF)
-        └── web_fallback.py           # General web search and scraping fallback
+        ├── url_checker.py        # Direct URL fetcher (HTML/PDF)
+        └── web_fallback.py       # General web search and scraping fallback
 ```
 
 ## Features
@@ -120,7 +135,7 @@ app/
 - ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
 - ✅ **Line Number Filtering**: Three-layer filter removes marginal and embedded line numbers that would otherwise corrupt reference text.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
-- ✅ **Five-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, and direct URL resource fetching.
+- ✅ **Six-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, web search fallback, and direct URL resource fetching.
 - ✅ **Partial ARXIV Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
@@ -159,6 +174,15 @@ app/
 ### Port 5000 in Use (macOS)
 
 - If you see "Address already in use", disable **AirPlay Receiver** in System Settings → General → AirDrop & Handoff, as it often occupies port 5000.
+
+### Import Errors with `ddgs`
+
+If you encounter errors like `ModuleNotFoundError: No module named 'ddgs'`, make sure you're using the virtual environment and have installed all dependencies:
+
+```bash
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
 
 ## Acknowledgments
 

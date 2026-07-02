@@ -3,8 +3,12 @@ app/checkers/extraction.py
 
 Helpers to extract structured identifiers and titles from raw reference strings.
 """
+import logging
 import re
-from .normalizer import normalize_ligatures, strip_venue_suffix, strip_author_header
+from typing import Optional
+from .normalizer import normalize_ligatures, strip_doi_punctuation, strip_venue_suffix, strip_author_header
+
+logger = logging.getLogger(__name__)
 
 
 COMMON_TITLE_WORDS = {
@@ -21,6 +25,7 @@ _DOI_URL_RE = re.compile(r'https?://(?:dx\.)?doi\.org/[-._;()/:a-zA-Z0-9]+')
 _BARE_DOI_RE = re.compile(r'\b10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+\b')
 _URL_RE = re.compile(r'https?://\S+|//[a-zA-Z][-./\w]*')
 _ARXIV_URL_RE = re.compile(r'https?://arxiv\.org/\S+')
+_ARXIV_ID_RE = re.compile(r'arxiv\.org/(?:abs/|pdf/)?(\d{4}\.\d{4,5}(v\d+)?)')
 _VENUE_YEAR_RE = re.compile(r'\b(?:19|20)\d{2}\b')
 
 
@@ -267,9 +272,48 @@ def heal_doi(base_doi: str, end_pos: int, ref_text: str):
         extension = match.group(1)
         if extension.lower() not in {'is', 'a', 'the', 'and', 'for', 'in', 'on', 'with'}:
             healed = base_doi + extension
-            print(f"  [DEBUG] DOI healing: {base_doi} -> {healed}")
+            logger.debug(f"  [DEBUG] DOI healing: {base_doi} -> {healed}")
             return healed, end_pos + match.end()
     return None, 0
+
+
+def extract_arxiv_id_from_url(url: str) -> Optional[str]:
+    """
+    Extract the arXiv identifier (e.g. '2301.12345v1') from an arXiv URL.
+    Returns None if the URL is not an arXiv link or no ID is found.
+    """
+    if 'arxiv.org' not in url:
+        return None
+    match = _ARXIV_ID_RE.search(url)
+    return match.group(1) if match else None
+
+
+def extract_arxiv_id_from_text(ref_text: str) -> Optional[str]:
+    """
+    Extract an arXiv identifier from any form found in the reference text:
+    - arXiv URLs (https://arxiv.org/abs/2301.12345)
+    - "arXiv:2403.02221" prefix
+    - "CoRR, abs/1810.04805" legacy format
+    Returns None if no arXiv ID is found.
+    """
+    # First, try URLs
+    urls = extract_urls_from_reference(ref_text)
+    for url in urls:
+        arxiv_id = extract_arxiv_id_from_url(url)
+        if arxiv_id:
+            return arxiv_id
+
+    # Then, try "arXiv:2403.02221" prefix
+    match = re.search(r'arXiv:\s*(\d{4}\.\d{4,5}(v\d+)?)', ref_text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Finally, try "CoRR, abs/1810.04805"
+    match = re.search(r'CoRR,\s*abs/(\d{4}\.\d{4,5}(v\d+)?)', ref_text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    return None
 
 
 def extract_urls_from_reference(ref_text: str) -> list:
@@ -304,3 +348,32 @@ def extract_urls_from_reference(ref_text: str) -> list:
             unique_urls.append(url)
     
     return unique_urls
+
+
+def build_original_url(ref_text: str) -> Optional[str]:
+    """
+    Builds a best-effort clickable URL for a reference entry.
+
+    Priority order:
+    1. DOI → https://doi.org/...
+    2. arXiv ID → https://arxiv.org/abs/...
+    3. First HTTP(S) URL found in the reference text
+    """
+    # 1. Try DOI
+    doi, _ = extract_doi_info(ref_text)
+    if doi:
+        return f"https://doi.org/{strip_doi_punctuation(doi)}"
+
+    # 2. Try arXiv ID from any URL in the reference
+    urls = extract_urls_from_reference(ref_text)
+    for url in urls:
+        arxiv_id = extract_arxiv_id_from_url(url)
+        if arxiv_id:
+            return f"https://arxiv.org/abs/{arxiv_id}"
+
+    # 3. Fallback: first HTTP(S) URL in the raw text
+    url_match = re.search(r'https?://[^\s,)]+', ref_text)
+    if url_match:
+        return url_match.group(0).rstrip('.,;)')
+
+    return None

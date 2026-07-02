@@ -1,6 +1,9 @@
 import fitz
+import logging
 import re
 from .checkers.normalizer import heal_hyphens
+
+logger = logging.getLogger(__name__)
 
 
 _LINE_NUM_PATTERN = re.compile(r'^\d{1,4}$')
@@ -132,10 +135,10 @@ def extract_bibliography(pdf_path):
 
     ref_start_index = candidates[0] if candidates else -1
     if ref_start_index != -1:
-        print(f"  [DEBUG] Bibliography section found at block {ref_start_index}: '{all_blocks[ref_start_index][4].strip()[:60]}'")
+        logger.debug(f"  [DEBUG] Bibliography section found at block {ref_start_index}: '{all_blocks[ref_start_index][4].strip()[:60]}'")
 
     if ref_start_index == -1:
-        print("  [DEBUG] Could not find bibliography section header in any block.")
+        logger.debug("  [DEBUG] Could not find bibliography section header in any block.")
         return []
 
     # 3. Concatenate text until the end of references or a termination header
@@ -150,7 +153,7 @@ def extract_bibliography(pdf_path):
         "credit", "credit author statement", "author statement", "use of generative", "generative ai"
     ]
 
-    print(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
+    logger.debug(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
     for i in range(ref_start_index + 1, len(all_blocks)):
         block_text = all_blocks[i][4].strip()
         lower_text = block_text.lower()
@@ -165,31 +168,31 @@ def extract_bibliography(pdf_path):
             r'credit|author\s+statement|use\s+of\s+generative|generative\s+ai)\b'
         )
         if re.match(term_pattern, norm_text):
-            print(f"  [DEBUG] STOP (anchor match): '{first_line}'")
+            logger.debug(f"  [DEBUG] STOP (anchor match): '{first_line}'")
             break
 
         if re.match(r'^appendix\s+[a-z0-9]', lower_text):
-            print(f"  [DEBUG] STOP (appendix letter): '{first_line}'")
+            logger.debug(f"  [DEBUG] STOP (appendix letter): '{first_line}'")
             break
 
         if re.match(r'^(table|fig\.?|figure)\s+[a-z]\d*\b', lower_text):
-            print(f"  [DEBUG] STOP (appendix table/figure): '{first_line}'")
+            logger.debug(f"  [DEBUG] STOP (appendix table/figure): '{first_line}'")
             break
 
         if len(lower_text.split()) < 10:
             clean_text = re.sub(r'[^a-z]', '', lower_text)
             if any(k.replace(' ', '') == clean_text for k in termination_keywords):
-                print(f"  [DEBUG] STOP (exact match): '{first_line}'")
+                logger.debug(f"  [DEBUG] STOP (exact match): '{first_line}'")
                 break
 
         if _is_numeric_table_row(block_text):
-            print(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
+            logger.debug(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
             continue
 
-        print(f"  [DEBUG]   INCLUDE block {i} ({len(lower_text.split())} words): '{first_line}'")
+        logger.debug(f"  [DEBUG]   INCLUDE block {i} ({len(lower_text.split())} words): '{first_line}'")
         ref_content.append(block_text)
 
-    print(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
+    logger.debug(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
 
     full_ref_text = "\n".join(ref_content)
 

@@ -4,6 +4,7 @@ app/checkers/backends/openalex.py
 OpenAlex API backend — supports DOI lookup and full-text title search.
 """
 
+import logging
 import os
 import re
 import time
@@ -20,6 +21,9 @@ from ..normalizer import (
     normalize_quotes,
     strip_doi_punctuation,
 )
+from .base import BackendService
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 pyalex.config.email = os.getenv("OPENALEX_EMAIL")
@@ -36,7 +40,7 @@ def _execute_with_retry(func: Callable, *args, **kwargs) -> Any:
             err_msg = str(e).lower()
             if "429" in err_msg or "too many requests" in err_msg:
                 wait_time = (2**attempt) + 1
-                print(
+                logger.debug(
                     f"  [DEBUG] OpenAlex Rate Limit (429). Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})"
                 )
                 time.sleep(wait_time)
@@ -102,72 +106,79 @@ def _process_work(work: dict) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# OpenAlexBackend Class
 # ---------------------------------------------------------------------------
 
 
-def lookup_by_doi(doi: str) -> dict:
-    """Fetch a work from OpenAlex by its DOI."""
-    try:
-        doi_query = strip_doi_punctuation(doi)
-        print(f"  OpenAlex DOI lookup: {doi_query}...")
-        work = _execute_with_retry(lambda: Works()[doi_query])
-        if work:
-            res = _process_work(work)
-            if res:
-                print(f"  ✓ Found in OpenAlex (DOI): {res['title'][:60]}...")
-                return res
-        return {"status": "not_found"}
-    except Exception as e:
-        err = str(e)
-        if "404" in err:
+class OpenAlexBackend(BackendService):
+    """OpenAlex API backend implementation."""
+
+    def lookup_by_doi(self, doi: str) -> dict:
+        """Fetch a work from OpenAlex by its DOI."""
+        try:
+            doi_query = strip_doi_punctuation(doi)
+            logger.debug(f"  OpenAlex DOI lookup: {doi_query}...")
+            work = _execute_with_retry(lambda: Works()[doi_query])
+            if work:
+                res = _process_work(work)
+                if res:
+                    logger.debug(f"  ✓ Found in OpenAlex (DOI): {res['title'][:60]}...")
+                    return res
             return {"status": "not_found"}
-        print(f"  - OpenAlex DOI error: {err[:50]}...")
-        return {"status": "error", "message": err}
+        except Exception as e:
+            err = str(e)
+            if "404" in err:
+                return {"status": "not_found"}
+            logger.debug(f"  - OpenAlex DOI error: {err[:50]}...")
+            return {"status": "error", "message": err}
 
+    def lookup_by_id(self, identifier: str) -> dict:
+        """Lookup by identifier (not used for OpenAlex)."""
+        # For OpenAlex, DOI lookups are preferred
+        return self.lookup_by_doi(identifier)
 
-def lookup_by_title(title: str) -> dict:
-    """Search OpenAlex by title string (full-text search)."""
-    try:
-        # Normalize typographic quotes and ligatures
-        clean = normalize_quotes(title)
-        clean = normalize_ligatures(clean)
-        # Remove colons, semicolons, and common trailing punctuation for the search query
-        query = re.sub(r"[:;.,!?]", " ", clean).strip()
+    def lookup_by_title(self, title: str) -> dict:
+        """Search OpenAlex by title string (full-text search)."""
+        try:
+            # Normalize typographic quotes and ligatures
+            clean = normalize_quotes(title)
+            clean = normalize_ligatures(clean)
+            # Remove colons, semicolons, and common trailing punctuation for the search query
+            query = re.sub(r"[:;.,!?]", " ", clean).strip()
 
-        print(f"  OpenAlex title search: {query[:70]}...")
-        results = _execute_with_retry(lambda: Works().search(query).get())
+            logger.debug(f"  OpenAlex title search: {query[:70]}...")
+            results = _execute_with_retry(lambda: Works().search(query).get())
 
-        if not results:
-            # Fallback: Search with only the first ~8 words (often more robust for long titles)
-            words = query.split()
-            if len(words) > 10:
-                short_query = " ".join(words[:8])
-                print(
-                    f"  → No results for full title. Trying fallback: {short_query}..."
-                )
-                results = _execute_with_retry(lambda: Works().search(short_query).get())
-
-        if results:
-            res = _process_work(results[0])
-            if res:
-                # Pre-acceptance relevance gate: reject obviously wrong matches.
-                # OpenAlex always returns *something* even when the paper isn't indexed.
-                # If the returned title is too dissimilar from our query, treat as not found.
-                relevance = calculate_similarity(title, res["title"])
-                if relevance < RELEVANCE_THRESHOLD:
-                    print(
-                        f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < {RELEVANCE_THRESHOLD}): '{res['title'][:60]}'"
+            if not results:
+                # Fallback: Search with only the first ~8 words (often more robust for long titles)
+                words = query.split()
+                if len(words) > 10:
+                    short_query = " ".join(words[:8])
+                    logger.debug(
+                        f"  → No results for full title. Trying fallback: {short_query}..."
                     )
-                    return {"status": "not_found"}
-                print(
-                    f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}..."
-                )
-                return res
+                    results = _execute_with_retry(lambda: Works().search(short_query).get())
 
-        print("  - Not found in OpenAlex by title")
-        return {"status": "not_found"}
-    except Exception as e:
-        err = str(e)
-        print(f"  - OpenAlex title search error: {err[:50]}...")
-        return {"status": "error", "message": err}
+            if results:
+                res = _process_work(results[0])
+                if res:
+                    # Pre-acceptance relevance gate: reject obviously wrong matches.
+                    # OpenAlex always returns *something* even when the paper isn't indexed.
+                    # If the returned title is too dissimilar from our query, treat as not found.
+                    relevance = calculate_similarity(title, res["title"])
+                    if relevance < RELEVANCE_THRESHOLD:
+                        logger.debug(
+                            f"  - OpenAlex title search: top result rejected (relevance {relevance:.2f} < {RELEVANCE_THRESHOLD}): '{res['title'][:60]}'"
+                        )
+                        return {"status": "not_found"}
+                    logger.debug(
+                        f"  ✓ Found in OpenAlex (title, relevance {relevance:.2f}): {res['title'][:60]}..."
+                    )
+                    return res
+
+            logger.debug("  - Not found in OpenAlex by title")
+            return {"status": "not_found"}
+        except Exception as e:
+            err = str(e)
+            logger.debug(f"  - OpenAlex title search error: {err[:50]}...")
+            return {"status": "error", "message": err}

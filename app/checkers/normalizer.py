@@ -31,9 +31,11 @@ def normalize_quotes(text: str) -> str:
 
 def normalize_text(text: str) -> str:
     """
-    Strips punctuation and converts to lowercase for fuzzy comparison.
+    Strips punctuation (except hyphens) and converts to lowercase for fuzzy comparison.
+    Preserves Unicode word characters (é, ñ, etc.) and hyphens, which are significant
+    in titles (e.g. "state-of-the-art").
     """
-    clean = re.sub(r'[^\w\s]', '', text)
+    clean = re.sub(r'[^\w\s-]', '', text)
     return clean.lower().strip()
 
 
@@ -96,7 +98,9 @@ def strip_author_header(text: str, common_title_words: set) -> str:
     return text
 
 
-RELEVANCE_THRESHOLD = 0.35
+RELEVANCE_THRESHOLD = 0.35  # Pre-acceptance filter for OpenAlex title search
+WEB_FALLBACK_TRIGGER = 0.60  # OpenAlex → web search fallback gate
+TITLE_SIMILARITY_THRESHOLD = 0.75  # Web search verification threshold
 
 
 def strip_doi_punctuation(doi: str) -> str:

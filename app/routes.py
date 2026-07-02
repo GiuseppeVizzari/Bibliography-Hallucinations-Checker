@@ -1,10 +1,12 @@
-import os, re, traceback
+import logging
+import os
 from flask import Blueprint, render_template, request, flash, redirect, current_app
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
 from .checkers import check_reference
-from .checkers.extraction import extract_doi_info, extract_urls_from_reference
-from .checkers.normalizer import strip_doi_punctuation
+from .checkers.extraction import build_original_url
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
 
@@ -45,38 +47,16 @@ def index():
                 results = []
                 total_refs = len(refs)
                 
-                print(f"\n{'='*60}")
-                print(f"Processing {total_refs} references")
-                print(f"{'='*60}\n")
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Processing {total_refs} references")
+                logger.info(f"{'='*60}\n")
                 
                 for i, ref in enumerate(refs, 1):
-                    print(f"[{i}/{total_refs}]")
+                    logger.info(f"[{i}/{total_refs}]")
                     check_result = check_reference(ref)
 
                     # Build best-effort link for the original reference
-                    original_url = None
-                    doi, _ = extract_doi_info(ref)
-                    if doi:
-                        doi_clean = strip_doi_punctuation(doi)
-                        original_url = f"https://doi.org/{doi_clean}"
-                    else:
-                        # Extract URLs (including arXiv IDs) from the reference
-                        urls = extract_urls_from_reference(ref)
-                        arxiv_id = None
-                        for url in urls:
-                            # Simple check to see if it's an arXiv URL
-                            if 'arxiv.org' in url:
-                                # Extract the arXiv ID from the URL (e.g., https://arxiv.org/abs/2301.12345)
-                                arxiv_match = re.search(r'arxiv\.org/(?:abs/|pdf/)?(\d{4}\.\d{4,5}(v\d+)?)', url)
-                                if arxiv_match:
-                                    arxiv_id = arxiv_match.group(1)
-                                    break
-                        if arxiv_id:
-                            original_url = f"https://arxiv.org/abs/{arxiv_id}"
-                        else:
-                            url_match = re.search(r'https?://[^\s,)]+', ref)
-                            if url_match:
-                                original_url = url_match.group(0).rstrip('.,;)')
+                    original_url = build_original_url(ref)
 
                     results.append({
                         "original": ref,
@@ -85,14 +65,14 @@ def index():
                         "number": i
                     })
                 
-                print(f"\n{'='*60}")
-                print(f"Processing complete!")
-                print(f"{'='*60}\n")
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Processing complete!")
+                logger.info(f"{'='*60}\n")
                 
                 return render_template('results.html', results=results, total_count=total_refs)
                 
             except Exception as e:
-                traceback.print_exc()
+                logger.error(f"Error processing file: {e}", exc_info=True)
                 flash(f'Error processing file: {str(e)}')
                 return redirect(request.url)
             finally:
