@@ -104,8 +104,16 @@ TITLE_SIMILARITY_THRESHOLD = 0.75  # Web search verification threshold
 
 
 def strip_doi_punctuation(doi: str) -> str:
-    """Removes trailing punctuation that may have been captured alongside a DOI."""
-    return doi.rstrip('.,;)]')
+    """
+    Removes trailing punctuation that may have been captured alongside a DOI.
+    Preserves the '10.' partial prefix (from broken DOIs like '10. 1371/...')
+    so that heal_doi can still reconstruct the full identifier.
+    """
+    cleaned = doi.rstrip('.,;)]')
+    # If stripping turned '10.' into '10', preserve the period for heal_doi
+    if cleaned == '10' and doi.rstrip() == '10.':
+        return '10.'
+    return cleaned
 
 
 def calculate_similarity(text1: str, text2: str) -> float:

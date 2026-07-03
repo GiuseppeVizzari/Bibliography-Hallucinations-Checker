@@ -21,12 +21,14 @@ COMMON_TITLE_WORDS = {
 }
 
 # Compiled regexes for cleanup
-_DOI_URL_RE = re.compile(r'https?://(?:dx\.)?doi\.org/[-._;()/:a-zA-Z0-9]+')
+_DOI_URL_RE = re.compile(r'https?://(?:dx\.)?doi\.org/[-._;()/:a-zA-Z0-9]*(?:\s+[-._;()/:a-zA-Z0-9]+)?')
 _BARE_DOI_RE = re.compile(r'\b10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+\b')
+_BROKEN_DOI_RE = re.compile(r'10\.\s+[-._;()/:a-zA-Z0-9]+')  # DOI broken by space/newline
 _URL_RE = re.compile(r'https?://\S+|//[a-zA-Z][-./\w]*')
 _ARXIV_URL_RE = re.compile(r'https?://arxiv\.org/\S+')
 _ARXIV_ID_RE = re.compile(r'arxiv\.org/(?:abs/|pdf/)?(\d{4}\.\d{4,5}(v\d+)?)')
 _VENUE_YEAR_RE = re.compile(r'\b(?:19|20)\d{2}\b')
+_PARTIAL_DOI_RE = re.compile(r'(10\.)\s')
 
 
 def _is_numeric_garbage(candidate: str) -> bool:
@@ -139,10 +141,13 @@ def extract_title_from_reference(ref_text: str) -> str:
     # --- 1. Normalize ---
     ref_text = normalize_ligatures(ref_text)
 
-    # --- 2. Strip DOI URLs and bare DOIs ---
+    # --- 2. Strip DOI URLs, bare DOIs, and broken DOI remnants ---
     # These often trail the title and confuse year and content heuristics.
-    text = _DOI_URL_RE.sub('', ref_text)
+    text = _DOI_URL_RE.sub('', ref_text)  # Also handles broken DOI URLs with space continuation
     text = _BARE_DOI_RE.sub('', text)
+    text = _BROKEN_DOI_RE.sub('', text)  # DOIs broken by PDF line-wrapping (no URL wrapper)
+    # Strip leftover DOI URL fragments (e.g. 'http://dx.doi.org/' after DOI was stripped)
+    text = re.sub(r'https?://(?:dx\.)?doi\.org/(?:\s+)?', ' ', text)
 
     # --- 3. Cleanup ---
     # Strip bracketed labels at the start with year info: [ Wang et al., 2025b ]
@@ -240,11 +245,15 @@ def extract_title_from_reference(ref_text: str) -> str:
 
 
 def _strip_trailing_url(title: str) -> str:
-    """Removes trailing URLs and bare DOIs from an extracted title string."""
+    """Removes trailing URLs, bare DOIs, 'URL' keyword, and 'Accessed' markers."""
     title = _ARXIV_URL_RE.sub('', title)
     title = _DOI_URL_RE.sub('', title)
     title = _BARE_DOI_RE.sub('', title)
     title = _URL_RE.sub('', title)
+    # Strip 'URL' keyword (often left orphaned after URL removal)
+    title = re.sub(r'\s*URL\s*', ' ', title)
+    # Strip '(Accessed <date>)' markers
+    title = re.sub(r'\s*\(Accessed\s+.*?\)', ' ', title, flags=re.IGNORECASE)
     # Clean up leading/trailing whitespace and punctuation artifacts
     title = re.sub(r'\s+', ' ', title).strip()
     title = title.rstrip('.,; ')
@@ -254,22 +263,37 @@ def _strip_trailing_url(title: str) -> str:
 def extract_doi_info(ref_text: str):
     """
     Extracts a DOI from a reference string.
+
+    Handles both complete DOIs (e.g. '10.1016/j.ssci.2023.106174') and partial
+    DOIs broken by PDF line-wrapping (e.g. '10. 1371/journal.pone.0276229' with
+    a space after '10.'). Partial DOIs are returned so that heal_doi can
+    reconstruct the full identifier.
     """
     pattern = r'10\.\d{4,9}/[-._;()/:a-zA-Z0-9]*'
     match = re.search(pattern, ref_text)
     if match:
         return match.group(0), match.end()
+
+    # Fallback: match '10.' followed by whitespace (broken DOI prefix)
+    partial = _PARTIAL_DOI_RE.search(ref_text)
+    if partial:
+        # Return position right after '10.' (before the whitespace) so heal_doi
+        # can consume the whitespace and find the continuation
+        end_after_prefix = partial.start(1) + len(partial.group(1))
+        return partial.group(1), end_after_prefix
+
     return None, 0
 
 
 def heal_doi(base_doi: str, end_pos: int, ref_text: str):
     """
     Attempts to extend a DOI that was broken by a space in the source PDF.
+    Strips trailing punctuation (periods, commas, etc.) from the healed DOI.
     """
     tail = ref_text[end_pos:]
     match = re.match(r'^\s+([-._;()/:a-zA-Z0-9]+)', tail)
     if match:
-        extension = match.group(1)
+        extension = match.group(1).rstrip('.,;)]')
         if extension.lower() not in {'is', 'a', 'the', 'and', 'for', 'in', 'on', 'with'}:
             healed = base_doi + extension
             logger.debug(f"  [DEBUG] DOI healing: {base_doi} -> {healed}")
@@ -320,33 +344,35 @@ def extract_urls_from_reference(ref_text: str) -> list:
     """
     Extracts all URLs found in the reference text.
     This includes DOIs, arXiv links, and other web URLs.
+    Trailing punctuation (periods, commas, etc.) is stripped from each URL.
     """
     urls = []
-    
+
     # Extract DOI URLs (both http://dx.doi.org/... and https://doi.org/...)
     doi_urls = _DOI_URL_RE.findall(ref_text)
     urls.extend(doi_urls)
-    
+
     # Extract bare DOIs (e.g., 10.1234/abcd.5678)
     bare_dois = _BARE_DOI_RE.findall(ref_text)
     urls.extend(bare_dois)
-    
+
     # Extract arXiv URLs (both http://arxiv.org/... and https://arxiv.org/...)
     arxiv_urls = _ARXIV_URL_RE.findall(ref_text)
     urls.extend(arxiv_urls)
-    
+
     # Extract any other URLs found (e.g., from full text like "URL: https://example.com")
     all_urls = _URL_RE.findall(ref_text)
     urls.extend(all_urls)
-    
-    # Remove duplicates while preserving order
+
+    # Remove duplicates while preserving order; strip trailing punctuation
     seen = set()
     unique_urls = []
     for url in urls:
-        if url not in seen:
-            seen.add(url)
-            unique_urls.append(url)
-    
+        cleaned = url.rstrip('.,;:)]')
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            unique_urls.append(cleaned)
+
     return unique_urls
 
 

@@ -8,6 +8,8 @@ Lookup priority:
   2. DOI healing (broken DOI reconstruction)
   3. arXiv ID
   4. Title search (OpenAlex)
+  5. URL checker (direct URL from reference)
+  6. Web search fallback (DuckDuckGo)
 
 Similarity scoring is applied to every result to help the UI flag
 likely hallucinations.
@@ -127,25 +129,26 @@ def check_reference(ref_text: str) -> dict:
             openalex_backend = OpenAlexBackend()
             result = openalex_backend.lookup_by_title(extracted_title)
 
-            # Fallback to web search if the match is poor (< WEB_FALLBACK_TRIGGER similarity)
+            # Fallback if the match is poor (< WEB_FALLBACK_TRIGGER similarity)
             if result and result.get("status") == "found":
                 sim = calculate_similarity(extracted_title, result.get("title", ""))
                 if sim < WEB_FALLBACK_TRIGGER:
-                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying web search...")
+                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying URL/web search...")
                     result = {"status": "not_found"}
 
-        # --- Step 4b: Web search fallback ---
-        if not result or result["status"] != "found":
-            logger.debug("  → Falling back to web search...")
-            web_fallback_backend = WebFallbackBackend()
-            result = web_fallback_backend.lookup_by_title(extracted_title, full_ref=ref_text)
-
-        # --- Step 5: URL checker ---
+        # --- Step 5: URL checker (direct URL from reference) ---
         if not result or result["status"] != "found":
             url_checker_backend = URLCheckerBackend()
             url = url_checker_backend.extract_url(ref_text)
             if url:
+                logger.debug(f"  → Found URL in reference: {url}")
                 result = url_checker_backend.lookup_by_url(url, extracted_title)
+
+        # --- Step 6: Web search fallback (last resort) ---
+        if not result or result["status"] != "found":
+            logger.debug("  → Falling back to web search...")
+            web_fallback_backend = WebFallbackBackend()
+            result = web_fallback_backend.lookup_by_title(extracted_title, full_ref=ref_text)
 
     except Exception as e:
         logger.debug(f"  - Unexpected error in verification pipeline: {e}")

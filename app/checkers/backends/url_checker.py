@@ -48,6 +48,37 @@ class URLCheckerBackend(BackendService):
             return url
         return None
 
+    def _fetch_page(self, url: str, headers: dict) -> requests.Response:
+        """Fetch a URL, following at most one HTML meta-refresh redirect."""
+        response = requests.get(url, headers=headers, timeout=10, verify=False)
+        response.raise_for_status()
+
+        # Follow HTML meta-refresh redirects (e.g. <meta http-equiv="refresh" ...>)
+        content_type = response.headers.get("Content-Type", "").lower()
+        if "text/html" in content_type:
+            refresh_match = re.search(
+                r'<meta\s+[^>]*http-equiv\s*=\s*["\']?refresh["\']?[^>]*content\s*=\s*["\']?\d+;\s*url\s*=\s*([^"\'>\s]+)',
+                response.text, re.IGNORECASE
+            )
+            if not refresh_match:
+                refresh_match = re.search(
+                    r'<meta\s+[^>]*content\s*=\s*["\']?\d+;\s*url\s*=\s*([^"\'>\s]+)["\']?',
+                    response.text, re.IGNORECASE
+                )
+                # Only use this broader pattern if http-equiv="refresh" is present
+                if refresh_match and 'http-equiv' not in response.text.lower().split('refresh')[0][-30:]:
+                    pass
+
+            if refresh_match:
+                redirect_url = refresh_match.group(1)
+                if not redirect_url.startswith("http"):
+                    redirect_url = url.rstrip("/") + "/" + redirect_url.lstrip("./")
+                logger.debug(f"  → Following meta-refresh to: {redirect_url}")
+                response = requests.get(redirect_url, headers=headers, timeout=10, verify=False)
+                response.raise_for_status()
+
+        return response
+
     def lookup_by_url(self, url: str, reference_title: str) -> dict:
         """
         Downloads the resource at the URL, extracts its title and metadata,
@@ -58,9 +89,8 @@ class URLCheckerBackend(BackendService):
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
-            # Fetch with a timeout of 10 seconds to avoid hanging the app
-            response = requests.get(url, headers=headers, timeout=10, verify=False)
-            response.raise_for_status()
+            # Fetch with meta-refresh redirect following
+            response = self._fetch_page(url, headers)
 
             content_type = response.headers.get("Content-Type", "").lower()
             title = "N/A"
@@ -147,11 +177,17 @@ class URLCheckerBackend(BackendService):
                 logger.debug("  - Could not extract a valid title from the URL")
                 return {"status": "not_found"}
 
-            # Relevance check
+            # Relevance check: similarity + keyword overlap fallback
             similarity = calculate_similarity(reference_title, title)
             if similarity < RELEVANCE_THRESHOLD:
-                logger.debug(f"  - URL check: top result rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}): '{title[:60]}'")
-                return {"status": "not_found"}
+                # Fallback: check if key words from reference title appear in page title
+                ref_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', reference_title)}
+                page_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', title)}
+                if ref_words & page_words:
+                    logger.debug(f"  [DEBUG] URL check: keyword overlap found despite low similarity ({similarity:.2f})")
+                else:
+                    logger.debug(f"  - URL check: rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}, no keyword overlap): '{title[:60]}'")
+                    return {"status": "not_found"}
 
             logger.debug(f"  ✓ Found URL resource (similarity {similarity:.2f}): {title[:60]}...")
             return {
