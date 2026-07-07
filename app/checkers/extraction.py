@@ -6,7 +6,7 @@ Helpers to extract structured identifiers and titles from raw reference strings.
 import logging
 import re
 from typing import Optional
-from .normalizer import normalize_ligatures, strip_doi_punctuation, strip_venue_suffix, strip_author_header
+from .normalizer import normalize_ligatures, normalize_quotes, strip_doi_punctuation, strip_venue_suffix, strip_author_header
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,94 @@ def _clean_title(candidate: str) -> str:
     return _strip_trailing_url(cleaned)
 
 
+def _extract_quoted_title(text: str) -> Optional[str]:
+    """
+    Extracts the outermost quoted title from text, handling nested quotes.
+
+    Supports curly quotes (""…""), straight quotes ("…"), and TeX-style (``…'').
+    When inner and outer quotes are the same character (e.g. curly quotes nesting),
+    correctly pairs them so the outermost content is returned.
+    """
+    LC = '\u201c'  # left curly double quote "
+    RC = '\u201d'  # right curly double quote "
+    SQ = '"'       # straight double quote
+    BT = '`'       # backtick
+    AP = "'"       # apostrophe
+
+    # Find all quote positions with their types
+    quotes = []
+    # Curly openers and closers
+    for m in re.finditer(re.escape(LC), text):
+        quotes.append((m.start(), 'open_lc'))
+    for m in re.finditer(re.escape(RC), text):
+        quotes.append((m.start(), 'close_rc'))
+    # Straight quotes
+    for m in re.finditer(r'"', text):
+        quotes.append((m.start(), 'straight'))
+    # TeX-style: `` ... ''
+    for m in re.finditer(r'``', text):
+        quotes.append((m.start(), 'open_tt'))
+    for m in re.finditer(r"''", text):
+        quotes.append((m.start(), 'close_tt'))
+
+    if not quotes:
+        return None
+
+    # Sort by position
+    quotes.sort(key=lambda x: x[0])
+
+    # Find the first opener
+    first = None
+    first_idx = None
+    for i, (pos, qtype) in enumerate(quotes):
+        if qtype in ('open_lc', 'straight', 'open_tt'):
+            first = (pos, qtype)
+            first_idx = i
+            break
+
+    if first is None:
+        return None
+
+    fpos, ftype = first
+    later = quotes[first_idx + 1:]
+
+    if ftype == 'open_lc':
+        # Curly opener: find matching RC closers
+        closers = [q for q in later if q[1] == 'close_rc']
+        if not closers:
+            return None
+        # Count inner LC openers before the last closer (nested same-type quotes)
+        inner_opens = [q for q in later if q[1] == 'open_lc' and q[0] < closers[-1][0]]
+        # The last RC is the outer closer if there are more closers than inner openers
+        # (each inner opener consumes one closer; remaining closer goes to outer)
+        if len(closers) > len(inner_opens):
+            return text[fpos + 1:closers[-1][0]].strip()
+        # No closer left for outer pair
+        return None
+
+    elif ftype == 'open_tt':
+        # TeX opener: find '' closers
+        closers = [q for q in later if q[1] == 'close_tt']
+        if closers:
+            return text[fpos + 2:closers[-1][0]].strip()
+        return None
+
+    else:  # straight
+        # Straight quotes: pair by counting
+        later_straight = [q for q in later if q[1] == 'straight']
+        if not later_straight:
+            return None
+        total = 1 + len(later_straight)  # including first
+        if total % 2 == 0:
+            return text[fpos + 1:later_straight[-1][0]].strip()
+        elif len(later_straight) >= 2:
+            return text[fpos + 1:later_straight[-2][0]].strip()
+        else:
+            return text[fpos + 1:later_straight[0][0]].strip()
+
+    return None
+
+
 def extract_title_from_reference(ref_text: str) -> str:
     """
     Attempts to extract the title from a reference string using advanced heuristics.
@@ -140,6 +228,7 @@ def extract_title_from_reference(ref_text: str) -> str:
     """
     # --- 1. Normalize ---
     ref_text = normalize_ligatures(ref_text)
+    ref_text = normalize_quotes(ref_text)
 
     # --- 2. Strip DOI URLs, bare DOIs, and broken DOI remnants ---
     # These often trail the title and confuse year and content heuristics.
@@ -156,10 +245,42 @@ def extract_title_from_reference(ref_text: str) -> str:
     text = re.sub(r'^\s*\[?\d+\]?\s*', '', text).strip()
 
     # --- 4. Quote Matching ---
-    # Quoted titles: "…", “…”, ``…'', or ``…'
-    quoted = re.search(r'(?:"|"|``)(.*?)(?:"|"|\'\')', text)
+    # Handles nested quotes (e.g. "title with "nested" quotes")
+    quoted = _extract_quoted_title(text)
     if quoted:
-        return _clean_title(quoted.group(1).strip())
+        # Quoted titles are already disambiguated from authors by the quotes,
+        # so we skip strip_author_header to preserve subtitles like "Osmnx: New methods..."
+        cleaned = strip_venue_suffix(quoted)
+        cleaned = _strip_trailing_venue(cleaned)
+        return _strip_trailing_url(cleaned)
+
+    # --- 4b. Book reference heuristic ---
+    # Pattern: "Author, Title. City: Publisher, Year."
+    # Find "City: Publisher" by looking for ". Capitalized: Capitalized, Year."
+    # Use a greedy match to find the LAST ". City: Publisher, Year." pattern.
+    city_pub_match = re.search(
+        r'.*\.\s+([A-Z][\w\s\'.\-]+):\s*([A-Z][\w\s\'.\-]+(?:\.[\w\s\'.\-]+)*)(?:,?\s*(?:19|20)\d{2})?\.?\s*$',
+        text,
+        re.DOTALL
+    )
+    if city_pub_match:
+        city = city_pub_match.group(1).strip()
+        publisher = city_pub_match.group(2).strip()
+        # Validate: city should be short (1-3 words), publisher should be reasonable
+        city_words = len(re.findall(r'\b\w+\b', city))
+        pub_words = len(re.findall(r'\b\w+\b', publisher))
+        if 1 <= city_words <= 3 and 1 <= pub_words <= 5:
+            # Get text before the city:publisher segment
+            before = text[:city_pub_match.start(1) - 2].strip().rstrip('.')  # -2 for '. '
+            # Split at first comma to separate author from title
+            first_comma = before.find(',')
+            if first_comma != -1:
+                author_part = before[:first_comma].strip()
+                title_part = before[first_comma + 1:].strip()
+                # Validate: author should look like a name, title should be substantive
+                author_words = re.findall(r'\b\w+\b', author_part)
+                if author_words and len(title_part) > 10 and not _is_numeric_garbage(title_part):
+                    return _clean_title(title_part)
 
     # --- 5. Author-Year Punctuation Heuristic ---
     # Often titles follow "(Year)" or "Year."

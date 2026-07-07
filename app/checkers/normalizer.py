@@ -65,6 +65,10 @@ def strip_author_header(text: str, common_title_words: set) -> str:
     """
     Cleans up a title that might still have a leftover author name at the start.
     E.g. 'Zhang, Crowd evacuation...' -> 'Crowd evacuation...'
+
+    For colon-based stripping, only strips when the pre-colon text looks like
+    an author name (single surname or initials + surname). Does NOT strip title
+    subtitles like 'Sprawl retrofit:' or 'Part Two:'.
     """
     if ':' in text:
         match = re.search(r'^[^:]{1,100}:\s*', text)
@@ -75,11 +79,23 @@ def strip_author_header(text: str, common_title_words: set) -> str:
                 header_full = match.group(0)
                 header_words = re.findall(r'\b\w+\b', header_full)
                 if len(header_words) <= 2:
-                    should_strip = True
-                    if len(header_words) == 1 and len(header_words[0]) > 4 and '.' not in header_words[0]:
-                        should_strip = False
-                    if should_strip:
-                        text = text[match.end():].strip()
+                    should_strip = False
+                    if len(header_words) == 1:
+                        w = header_words[0]
+                        # Strip single short words (surnames like 'Smith', 'Zhang') or
+                        # initials with periods ('J.', 'A.B.')
+                        if len(w) <= 7 or '.' in w:
+                            should_strip = True
+                    elif len(header_words) == 2:
+                        # Only strip if first word looks like initials (contains a period)
+                        # e.g. 'J. Smith:' -> strip; 'Sprawl retrofit:' -> keep
+                        if '.' in header_words[0]:
+                            should_strip = True
+                    # Only strip if the tail looks like a title
+                    tail = text[match.end():].strip()
+                    tail_words = {w for w in re.findall(r'\b\w+\b', tail.lower()) if len(w) > 1}
+                    if should_strip and tail_words & common_title_words:
+                        text = tail
 
     while ',' in text:
         split_point = text.find(',')
@@ -91,8 +107,15 @@ def strip_author_header(text: str, common_title_words: set) -> str:
                 break
             words = {w for w in re.findall(r'\b\w+\b', header.lower()) if len(w) > 1}
             if not (words & common_title_words):
-                text = tail
-                continue
+                # Check if the tail looks like a title continuation
+                tail_words = {w for w in re.findall(r'\b\w+\b', tail.lower()) if len(w) > 1}
+                tail_looks_like_title = bool(tail_words & common_title_words)
+                # Author names: short surname (< 8 chars) or initials (contains period)
+                is_short_surname = len(words) == 1 and len(list(words)[0]) < 8
+                has_initials = any('.' in w for w in header.split())
+                if (is_short_surname or has_initials) and tail_looks_like_title:
+                    text = tail
+                    continue
         break
 
     return text

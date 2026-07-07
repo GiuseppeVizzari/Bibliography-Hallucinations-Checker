@@ -180,13 +180,16 @@ class URLCheckerBackend(BackendService):
             # Relevance check: similarity + keyword overlap fallback
             similarity = calculate_similarity(reference_title, title)
             if similarity < RELEVANCE_THRESHOLD:
-                # Fallback: check if key words from reference title appear in page title
+                # Fallback: require at least 3 overlapping words AND a minimum similarity floor
+                # This prevents accepting generic portal pages (e.g. "Open Data BCN") for
+                # specific dataset titles (e.g. "Disposable household income per capita...")
                 ref_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', reference_title)}
                 page_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', title)}
-                if ref_words & page_words:
-                    logger.debug(f"  [DEBUG] URL check: keyword overlap found despite low similarity ({similarity:.2f})")
+                overlap = ref_words & page_words
+                if len(overlap) >= 3 and similarity >= 0.20:
+                    logger.debug(f"  [DEBUG] URL check: keyword overlap found ({len(overlap)} words) despite low similarity ({similarity:.2f})")
                 else:
-                    logger.debug(f"  - URL check: rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}, no keyword overlap): '{title[:60]}'")
+                    logger.debug(f"  - URL check: rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}, overlap {len(overlap)} words): '{title[:60]}'")
                     return {"status": "not_found"}
 
             logger.debug(f"  ✓ Found URL resource (similarity {similarity:.2f}): {title[:60]}...")
