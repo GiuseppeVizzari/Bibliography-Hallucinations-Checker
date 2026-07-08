@@ -7,8 +7,8 @@ Lookup priority:
   1. DOI  → OpenAlex → Crossref / DataCite
   2. DOI healing (broken DOI reconstruction)
   3. arXiv ID
-  4. Title search (OpenAlex)
-  5. URL checker (direct URL from reference)
+  4. URL checker (direct URL from reference)
+  5. Title search (OpenAlex)
   6. Web search fallback (DuckDuckGo)
 
 Similarity scoring is applied to every result to help the UI flag
@@ -20,7 +20,6 @@ from .extraction import (
     extract_doi_info,
     extract_arxiv_id_from_text,
     heal_doi,
-    extract_urls_from_reference,
 )
 from .normalizer import calculate_similarity, strip_doi_punctuation, WEB_FALLBACK_TRIGGER
 
@@ -122,7 +121,20 @@ def check_reference(ref_text: str) -> dict:
                 arxiv_backend = ArxivBackend()
                 result = arxiv_backend.lookup_by_id(arxiv_id)
 
-        # --- Step 4: Title search ---
+        # --- Step 4: URL checker (direct URL from reference) ---
+        if not result or result["status"] != "found":
+            url_checker_backend = URLCheckerBackend()
+            urls = url_checker_backend.extract_urls(ref_text)
+            for url in urls:
+                logger.debug(f"  → Trying URL from reference: {url}")
+                result = url_checker_backend.lookup_by_url(url, extracted_title)
+                if result["status"] == "found":
+                    break
+            else:
+                if urls:
+                    result = {"status": "not_found"}
+
+        # --- Step 5: Title search ---
         if not result or result["status"] != "found":
             logger.debug(f"  Extracted title: {extracted_title[:80]}...")
             logger.debug("  → Falling back to title search...")
@@ -133,16 +145,8 @@ def check_reference(ref_text: str) -> dict:
             if result and result.get("status") == "found":
                 sim = calculate_similarity(extracted_title, result.get("title", ""))
                 if sim < WEB_FALLBACK_TRIGGER:
-                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying URL/web search...")
+                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying web search...")
                     result = {"status": "not_found"}
-
-        # --- Step 5: URL checker (direct URL from reference) ---
-        if not result or result["status"] != "found":
-            url_checker_backend = URLCheckerBackend()
-            url = url_checker_backend.extract_url(ref_text)
-            if url:
-                logger.debug(f"  → Found URL in reference: {url}")
-                result = url_checker_backend.lookup_by_url(url, extracted_title)
 
         # --- Step 6: Web search fallback (last resort) ---
         if not result or result["status"] != "found":

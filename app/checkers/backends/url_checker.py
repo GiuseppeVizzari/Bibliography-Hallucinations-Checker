@@ -11,7 +11,8 @@ import re
 import requests
 import urllib3
 import fitz  # PyMuPDF
-from typing import Optional
+from typing import Optional, List
+from ..extraction import extract_urls_from_reference
 from ..normalizer import calculate_similarity, RELEVANCE_THRESHOLD
 from .base import BackendService
 
@@ -37,16 +38,28 @@ class URLCheckerBackend(BackendService):
         return {"status": "not_found"}
 
     def extract_url(self, ref_text: str) -> Optional[str]:
-        """Extracts a URL from a reference string."""
-        # Match standard http/https URLs
-        match = re.search(r'https?://[^\s,)]+', ref_text)
-        if match:
-            url = match.group(0).rstrip('.,;)]')
-            # Skip DOIs and arXiv URLs since they are handled by their own backends
-            if "doi.org" in url or "arxiv.org" in url:
-                return None
-            return url
-        return None
+        """Extracts a URL from a reference string (legacy single-URL interface)."""
+        urls = self.extract_urls(ref_text)
+        return urls[0] if urls else None
+
+    def extract_urls(self, ref_text: str) -> List[str]:
+        """Extracts all non-DOI, non-arXiv URLs from a reference string.
+
+        Uses the comprehensive URL extraction from extraction.py, then filters
+        out DOI and arXiv URLs that are already handled by earlier pipeline steps.
+        """
+        all_urls = extract_urls_from_reference(ref_text)
+        result = []
+        for url in all_urls:
+            lower = url.lower()
+            # Skip DOI lookups (handled by step 1/2)
+            if "doi.org" in lower or re.match(r'^10\.', url):
+                continue
+            # Skip arXiv lookups (handled by step 3)
+            if "arxiv.org" in lower:
+                continue
+            result.append(url)
+        return result
 
     def _fetch_page(self, url: str, headers: dict) -> requests.Response:
         """Fetch a URL, following at most one HTML meta-refresh redirect."""

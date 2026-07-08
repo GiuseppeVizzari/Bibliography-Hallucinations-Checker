@@ -94,8 +94,8 @@ Each reference is checked in priority order:
 | 1 | DOI lookup | OpenAlex → Crossref / DataCite | Zenodo DOIs (10.5281) route to DataCite first |
 | 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping, including `10.` prefix splits |
 | 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
-| 4 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to DuckDuckGo web search if no match or similarity < 0.6 |
-| 5 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL, follows meta-refresh redirects, extracts `<title>`, compares against reference |
+| 4 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL in the reference, follows meta-refresh redirects, extracts `<title>`, compares against reference; tries all non-DOI/non-arXiv URLs |
+| 5 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to DuckDuckGo web search if no match or similarity < 0.6 |
 | 6 | Web fallback | DuckDuckGo + scraping | Web search with page-title verification for non-academic references (last resort) |
 
 ### 7. Similarity Scoring
