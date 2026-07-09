@@ -20,8 +20,10 @@ from .extraction import (
     extract_doi_info,
     extract_arxiv_id_from_text,
     heal_doi,
+    build_original_url,
 )
-from .normalizer import calculate_similarity, strip_doi_punctuation, WEB_FALLBACK_TRIGGER
+from .normalizer import calculate_similarity, strip_doi_punctuation
+from .config import WEB_FALLBACK_TRIGGER
 
 logger = logging.getLogger(__name__)
 from .backends import (
@@ -33,6 +35,57 @@ from .backends import (
     WebFallbackBackend
 )
 
+# --- Cached backend singletons (thread-safe after lazy init) ---
+
+_openalex = None
+_crossref = None
+_datacite = None
+_arxiv = None
+_url_checker = None
+_web_fallback = None
+
+
+def _get_openalex():
+    global _openalex
+    if _openalex is None:
+        _openalex = OpenAlexBackend()
+    return _openalex
+
+
+def _get_crossref():
+    global _crossref
+    if _crossref is None:
+        _crossref = CrossrefBackend()
+    return _crossref
+
+
+def _get_datacite():
+    global _datacite
+    if _datacite is None:
+        _datacite = DataCiteBackend()
+    return _datacite
+
+
+def _get_arxiv():
+    global _arxiv
+    if _arxiv is None:
+        _arxiv = ArxivBackend()
+    return _arxiv
+
+
+def _get_url_checker():
+    global _url_checker
+    if _url_checker is None:
+        _url_checker = URLCheckerBackend()
+    return _url_checker
+
+
+def _get_web_fallback():
+    global _web_fallback
+    if _web_fallback is None:
+        _web_fallback = WebFallbackBackend()
+    return _web_fallback
+
 
 def _run_doi_search_cycle(doi: str) -> dict:
     """
@@ -40,28 +93,23 @@ def _run_doi_search_cycle(doi: str) -> dict:
     Zenodo DOIs go to DataCite before Crossref; everything else reversed.
     """
     # 1. OpenAlex
-    openalex_backend = OpenAlexBackend()
-    res = openalex_backend.lookup_by_doi(doi)
+    res = _get_openalex().lookup_by_doi(doi)
     if res["status"] == "found":
         return res
 
     # 2. Zenodo/DataCite-first vs standard Crossref-first
     if "zenodo" in doi.lower() or "10.5281" in doi:
-        datacite_backend = DataCiteBackend()
-        res = datacite_backend.lookup_by_doi(doi)
+        res = _get_datacite().lookup_by_doi(doi)
         if res["status"] == "found":
             return res
-        crossref_backend = CrossrefBackend()
-        res = crossref_backend.lookup_by_doi(doi)
+        res = _get_crossref().lookup_by_doi(doi)
         if res["status"] == "found":
             return res
     else:
-        crossref_backend = CrossrefBackend()
-        res = crossref_backend.lookup_by_doi(doi)
+        res = _get_crossref().lookup_by_doi(doi)
         if res["status"] == "found":
             return res
-        datacite_backend = DataCiteBackend()
-        res = datacite_backend.lookup_by_doi(doi)
+        res = _get_datacite().lookup_by_doi(doi)
         if res["status"] == "found":
             return res
 
@@ -84,7 +132,8 @@ def check_reference(ref_text: str) -> dict:
         }
     """
     if not ref_text or len(ref_text) < 10:
-        return {"status": "skipped", "reason": "Too short", "similarity": 0.0}
+        return {"status": "skipped", "reason": "Too short", "similarity": 0.0,
+                "original_url": build_original_url(ref_text)}
 
     logger.debug(f"\n[DEBUG] Checking reference...")
     logger.debug(f"  Original: {ref_text[:100]}...")
@@ -118,16 +167,14 @@ def check_reference(ref_text: str) -> dict:
 
             if arxiv_id:
                 logger.debug(f"  → Found arXiv ID: {arxiv_id}")
-                arxiv_backend = ArxivBackend()
-                result = arxiv_backend.lookup_by_id(arxiv_id)
+                result = _get_arxiv().lookup_by_id(arxiv_id)
 
         # --- Step 4: URL checker (direct URL from reference) ---
         if not result or result["status"] != "found":
-            url_checker_backend = URLCheckerBackend()
-            urls = url_checker_backend.extract_urls(ref_text)
+            urls = _get_url_checker().extract_urls(ref_text)
             for url in urls:
                 logger.debug(f"  → Trying URL from reference: {url}")
-                result = url_checker_backend.lookup_by_url(url, extracted_title)
+                result = _get_url_checker().lookup_by_url(url, extracted_title)
                 if result["status"] == "found":
                     break
             else:
@@ -138,8 +185,7 @@ def check_reference(ref_text: str) -> dict:
         if not result or result["status"] != "found":
             logger.debug(f"  Extracted title: {extracted_title[:80]}...")
             logger.debug("  → Falling back to title search...")
-            openalex_backend = OpenAlexBackend()
-            result = openalex_backend.lookup_by_title(extracted_title)
+            result = _get_openalex().lookup_by_title(extracted_title)
 
             # Fallback if the match is poor (< WEB_FALLBACK_TRIGGER similarity)
             if result and result.get("status") == "found":
@@ -151,12 +197,12 @@ def check_reference(ref_text: str) -> dict:
         # --- Step 6: Web search fallback (last resort) ---
         if not result or result["status"] != "found":
             logger.debug("  → Falling back to web search...")
-            web_fallback_backend = WebFallbackBackend()
-            result = web_fallback_backend.lookup_by_title(extracted_title, full_ref=ref_text)
+            result = _get_web_fallback().lookup_by_title(extracted_title, full_ref=ref_text)
 
     except Exception as e:
         logger.debug(f"  - Unexpected error in verification pipeline: {e}")
-        return {"status": "error", "message": str(e), "similarity": 0.0}
+        return {"status": "error", "message": str(e), "similarity": 0.0,
+                "original_url": build_original_url(ref_text)}
 
     # Similarity scoring
     if result is not None:
@@ -172,5 +218,7 @@ def check_reference(ref_text: str) -> dict:
             result["similarity"] = 0.0
     else:
         result = {"status": "not_found", "similarity": 0.0}
+
+    result["original_url"] = build_original_url(ref_text)
 
     return result

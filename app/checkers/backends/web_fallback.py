@@ -11,7 +11,13 @@ from bs4 import BeautifulSoup
 from ddgs import DDGS
 
 from ..extraction import extract_urls_from_reference
-from ..normalizer import calculate_similarity, TITLE_SIMILARITY_THRESHOLD
+from ..normalizer import calculate_similarity
+from ..config import (
+    TITLE_SIMILARITY_THRESHOLD,
+    WEB_BOOST_SNIPPET_CONTAINS,
+    WEB_BOOST_TITLE_OVERLAP,
+    WEB_BOOST_LENGTH_MATCH,
+)
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
@@ -164,7 +170,7 @@ class WebFallbackBackend(BackendService):
             if (snippet and title.lower() in snippet.lower()) or (
                 res_title and res_title.lower() in title.lower()
             ):
-                score = max(score, 0.8)
+                score = max(score, WEB_BOOST_SNIPPET_CONTAINS)
 
             # Additional boost for exact title matches or when the result title contains parts of the target title
             # This helps with cases where search engines return very similar titles but not exact matches
@@ -176,11 +182,11 @@ class WebFallbackBackend(BackendService):
                     and any(word in res_title.lower() for word in title.lower().split())
                 )
             ):
-                score = max(score, 0.85)
+                score = max(score, WEB_BOOST_TITLE_OVERLAP)
 
             # Even more aggressive boost for very similar titles (within 10% difference in length)
             if res_title and abs(len(title) - len(res_title)) < len(title) * 0.1:
-                score = max(score, 0.9)
+                score = max(score, WEB_BOOST_LENGTH_MATCH)
 
             ranked_results.append((score, res))
 

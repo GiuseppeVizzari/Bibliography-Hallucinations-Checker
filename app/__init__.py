@@ -1,10 +1,16 @@
 import logging
+import os
+import secrets
 from flask import Flask, render_template
+from flask_wtf.csrf import CSRFProtect
+
+csrf = CSRFProtect()
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'dev'  # Change this in production
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+    app.config['WTF_CSRF_ENABLED'] = True
 
     # Configure logging: debug-level output to stdout
     logging.basicConfig(
@@ -15,6 +21,8 @@ def create_app():
 
     from .routes import bp as main_bp
     app.register_blueprint(main_bp)
+
+    csrf.init_app(app)
 
     # Error handler for file size limit
     @app.errorhandler(413)

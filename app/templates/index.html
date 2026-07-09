@@ -12,6 +12,7 @@
             <small><strong>File limit:</strong> Maximum 16MB</small>
         </div>
         <form method="post" enctype="multipart/form-data" class="mt-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
                 <label for="file" class="form-label">Select PDF file</label>
                 <input class="form-control" type="file" id="file" name="file" accept=".pdf" required>

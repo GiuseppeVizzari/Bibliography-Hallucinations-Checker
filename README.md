@@ -23,13 +23,20 @@ The virtual environment approach is recommended because:
 1. It isolates dependencies from your system Python installation
 2. It prevents conflicts with other Python projects on your system
 
-### 2. Configure OpenAlex (Optional)
-The application uses **OpenAlex** for high-speed reference verification. To get even faster responses (access to the "polito pool"), add your email and API key to the `.env` file:
+### 2. Configure Environment Variables
 
-```env
-OPENALEX_EMAIL=your-email@example.com
-OPENALEX_API_KEY=your-api-key
+Copy `.env.example` to `.env` and fill in the values:
+
+```bash
+cp .env.example .env
 ```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SECRET_KEY` | **Yes** | Flask secret key for session cookies & CSRF protection. Generate with: `python -c "import secrets; print(secrets.token_hex(16))"` |
+| `OPENALEX_EMAIL` | No | Email for OpenAlex "polite pool" access (faster responses) |
+| `OPENALEX_API_KEY` | No | API key for higher OpenAlex rate limits |
+| `FLASK_DEBUG` | No | Set to `1` to enable Flask debug mode (not recommended for production) |
 
 ### 3. Run the Application
 
@@ -106,23 +113,30 @@ Every successfully matched result is compared against the extracted reference ti
 
 ```
 app/
-├── __init__.py                   # Flask app factory (16 MB upload limit, 413 error handler)
-├── routes.py                     # Upload route + processing loop
+├── __init__.py                   # Flask app factory (CSRF protection, SECRET_KEY from env)
+├── routes.py                     # Upload route + parallel processing (ThreadPoolExecutor)
 ├── pdf_processor.py              # PDF parsing, bibliography detection, reference splitting
+│
+├── templates/
+│   ├── base.html                 # Base template
+│   ├── index.html                # Upload page (with CSRF token)
+│   ├── processing.html           # Progress indicator during verification
+│   └── results.html              # Results table
 │
 └── checkers/
     ├── __init__.py               # Exports check_reference
-    ├── orchestrator.py           # 5-step verification pipeline
+    ├── config.py                 # Centralized thresholds, retry logic, rate limits
+    ├── orchestrator.py           # 6-step verification pipeline + cached backend singletons
     ├── extraction.py             # DOI/arXiv ID/title extraction heuristics
     ├── normalizer.py             # Unicode ligature decomposition, quote normalization, similarity
     │
     └── backends/
         ├── __init__.py           # Exports all backend classes
-        ├── base.py               # BackendService base class
+        ├── base.py               # BackendService base class (DOI, title, URL, identifier lookups)
         ├── openalex.py           # OpenAlex API (DOI lookup + title search)
         ├── crossref.py           # Crossref API via habanero
         ├── datacite.py           # DataCite REST API
-        ├── arxiv.py              # arXiv Atom feed API
+        ├── arxiv.py              # arXiv Atom feed API (HTTPS, rate-limited)
         ├── url_checker.py        # Direct URL fetcher (HTML/PDF)
         └── web_fallback.py       # General web search and scraping fallback
 ```
@@ -130,18 +144,23 @@ app/
 ## Features
 
 - ✅ **Hallucination Detection**: Visual cues (badges and row highlighting) flag found references that differ significantly from the PDF text.
+- ✅ **Parallel Processing**: References are verified concurrently (4 workers) for significantly faster processing.
+- ✅ **Progress Indicator**: Real-time progress bar shows verification status during processing.
 - ✅ **Multi-language Bibliography Headers**: Supports English and Italian section titles, plus common OCR/typo variants.
 - ✅ **Appendix Termination**: Automatically stops collecting references at ~30 termination keywords, including lettered appendix tables and numeric table rows.
 - ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
 - ✅ **Line Number Filtering**: Three-layer filter removes marginal and embedded line numbers that would otherwise corrupt reference text.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
 - ✅ **Six-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, web search fallback, and direct URL resource fetching.
-- ✅ **Partial ARXIV Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
+- ✅ **Partial arXiv Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
+- ✅ **Rate Limiting & Retry**: Automatic exponential backoff for rate-limited APIs (arXiv, DataCite, OpenAlex).
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
 - ✅ **Improved Visibility**: Updated UI colors (orange vs white) for better legibility of similarity scores and status badges.
-- ✅ **No API Keys Required**: Uses open scholarly APIs.
+- ✅ **CSRF Protection**: Form submissions are protected against cross-site request forgery attacks.
+- ✅ **Secure by Default**: SECRET_KEY sourced from environment variables, debug mode disabled by default.
+- ✅ **No Scholarly API Keys Required**: OpenAlex, Crossref, DataCite, and arXiv are free and open. Optional API keys improve rate limits.
 - ✅ **Web Search Fallback**: For references not found in academic APIs, the app performs a targeted web search and similarity analysis on page titles.
 - ✅ **Intelligent Fallback**: Automatically triggers web search if academic results are found but have low similarity (< 60%), preventing false positives from blocking discovery.
 

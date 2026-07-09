@@ -6,13 +6,30 @@ arXiv API backend — lookup by arXiv ID via the official Atom feed API.
 
 import logging
 import requests
+import threading
 import xml.etree.ElementTree as ET
+from ..config import execute_with_retry, ARXIV_MIN_DELAY
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
 
-_API_URL = "http://export.arxiv.org/api/query"
+_API_URL = "https://export.arxiv.org/api/query"
 _NS = {'atom': 'http://www.w3.org/2005/Atom'}
+
+# Thread-safe rate-limit gate for arXiv (max 1 request per 3 seconds)
+_arxiv_lock = threading.Lock()
+_arxiv_last_request = 0.0
+
+
+def _arxiv_rate_limit():
+    """Enforce arXiv's rate limit: max 10 requests per 3 seconds."""
+    import time
+    with _arxiv_lock:
+        global _arxiv_last_request
+        elapsed = time.time() - _arxiv_last_request
+        if elapsed < ARXIV_MIN_DELAY:
+            time.sleep(ARXIV_MIN_DELAY - elapsed)
+        _arxiv_last_request = time.time()
 
 
 class ArxivBackend(BackendService):
@@ -27,7 +44,12 @@ class ArxivBackend(BackendService):
         """Fetch a paper from the arXiv API by its ID (e.g. '2412.11814')."""
         try:
             logger.debug(f"  arXiv API lookup: {arxiv_id}...")
-            response = requests.get(_API_URL, params={"id_list": arxiv_id}, timeout=10)
+            _arxiv_rate_limit()
+
+            def _fetch():
+                return requests.get(_API_URL, params={"id_list": arxiv_id}, timeout=10)
+
+            response = execute_with_retry(_fetch)
 
             if response.status_code != 200:
                 return {"status": "not_found"}
@@ -75,6 +97,6 @@ class ArxivBackend(BackendService):
             logger.debug(f"  - arXiv API error: {str(e)[:50]}...")
             return {"status": "error", "message": str(e)}
 
-    def lookup_by_title(self, title: str) -> dict:
+    def lookup_by_title(self, title: str, full_ref: str = "") -> dict:
         """Title search not implemented for arXiv."""
         return {"status": "not_found"}

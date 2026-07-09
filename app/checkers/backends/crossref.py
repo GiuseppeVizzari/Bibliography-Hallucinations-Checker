@@ -11,18 +11,24 @@ from .base import BackendService
 
 logger = logging.getLogger(__name__)
 
-_cr = Crossref()
-
 
 class CrossrefBackend(BackendService):
     """Crossref API backend implementation."""
+
+    _client: Crossref = None  # per-instance, lazy
+
+    def _get_client(self) -> Crossref:
+        """Lazy-initialise the Crossref client on first use."""
+        if self._client is None:
+            self._client = Crossref()
+        return self._client
 
     def lookup_by_doi(self, doi: str) -> dict:
         """Fetch a work from Crossref by its DOI."""
         try:
             doi_query = strip_doi_punctuation(doi)
             logger.debug(f"  Crossref DOI lookup: {doi_query}...")
-            res = _cr.works(ids=doi_query)
+            res = self._get_client().works(ids=doi_query)
 
             if not (res and 'message' in res):
                 return {"status": "not_found"}
@@ -90,7 +96,7 @@ class CrossrefBackend(BackendService):
         # For Crossref, DOI lookups are preferred
         return self.lookup_by_doi(identifier)
 
-    def lookup_by_title(self, title: str) -> dict:
+    def lookup_by_title(self, title: str, full_ref: str = "") -> dict:
         """Title search not implemented for Crossref."""
         # Crossref does not support title search in the same way as OpenAlex
         return {"status": "not_found"}

@@ -25,9 +25,17 @@ from .base import BackendService
 
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-pyalex.config.email = os.getenv("OPENALEX_EMAIL")
-pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
+_configured = False
+
+
+def _ensure_config():
+    """Lazy-initialise pyalex config on first API call."""
+    global _configured
+    if not _configured:
+        load_dotenv()
+        pyalex.config.email = os.getenv("OPENALEX_EMAIL")
+        pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
+        _configured = True
 
 
 def _execute_with_retry(func: Callable, *args, **kwargs) -> Any:
@@ -115,6 +123,7 @@ class OpenAlexBackend(BackendService):
 
     def lookup_by_doi(self, doi: str) -> dict:
         """Fetch a work from OpenAlex by its DOI."""
+        _ensure_config()
         try:
             doi_query = strip_doi_punctuation(doi)
             logger.debug(f"  OpenAlex DOI lookup: {doi_query}...")
@@ -137,8 +146,9 @@ class OpenAlexBackend(BackendService):
         # For OpenAlex, DOI lookups are preferred
         return self.lookup_by_doi(identifier)
 
-    def lookup_by_title(self, title: str) -> dict:
+    def lookup_by_title(self, title: str, full_ref: str = "") -> dict:
         """Search OpenAlex by title string (full-text search)."""
+        _ensure_config()
         try:
             # Normalize typographic quotes and ligatures
             clean = normalize_quotes(title)

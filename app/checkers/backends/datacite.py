@@ -7,6 +7,7 @@ DataCite API backend — DOI lookup via REST API.
 import logging
 import requests
 from ..normalizer import strip_doi_punctuation
+from ..config import execute_with_retry
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,11 @@ class DataCiteBackend(BackendService):
         try:
             doi_query = strip_doi_punctuation(doi)
             logger.debug(f"  DataCite DOI lookup: {doi_query}...")
-            response = requests.get(f"{_API_BASE}/{doi_query}", timeout=10)
+
+            def _fetch():
+                return requests.get(f"{_API_BASE}/{doi_query}", timeout=10)
+
+            response = execute_with_retry(_fetch)
 
             if response.status_code != 200:
                 return {"status": "not_found"}
@@ -65,6 +70,6 @@ class DataCiteBackend(BackendService):
         # For DataCite, DOI lookups are preferred
         return self.lookup_by_doi(identifier)
 
-    def lookup_by_title(self, title: str) -> dict:
+    def lookup_by_title(self, title: str, full_ref: str = "") -> dict:
         """Title search not implemented for DataCite."""
         return {"status": "not_found"}

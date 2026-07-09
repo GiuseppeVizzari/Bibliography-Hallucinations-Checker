@@ -7,6 +7,13 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
+# Re-export thresholds from config for backward compatibility
+from .config import (  # noqa: F401
+    RELEVANCE_THRESHOLD,
+    WEB_FALLBACK_TRIGGER,
+    TITLE_SIMILARITY_THRESHOLD,
+)
+
 
 def normalize_ligatures(text: str) -> str:
     """Decomposes Unicode ligatures like 'ﬁ' into 'fi', 'ﬂ' into 'fl', etc."""
@@ -119,11 +126,6 @@ def strip_author_header(text: str, common_title_words: set) -> str:
         break
 
     return text
-
-
-RELEVANCE_THRESHOLD = 0.35  # Pre-acceptance filter for OpenAlex title search
-WEB_FALLBACK_TRIGGER = 0.60  # OpenAlex → web search fallback gate
-TITLE_SIMILARITY_THRESHOLD = 0.75  # Web search verification threshold
 
 
 def strip_doi_punctuation(doi: str) -> str:

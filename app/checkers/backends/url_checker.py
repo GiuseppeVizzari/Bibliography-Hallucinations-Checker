@@ -9,17 +9,14 @@ import html
 import logging
 import re
 import requests
-import urllib3
 import fitz  # PyMuPDF
 from typing import Optional, List
 from ..extraction import extract_urls_from_reference
-from ..normalizer import calculate_similarity, RELEVANCE_THRESHOLD
+from ..normalizer import calculate_similarity
+from ..config import RELEVANCE_THRESHOLD, URL_REJECT_FLOOR, URL_KEYWORD_OVERLAP_MIN
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
-
-# Disable SSL warning for verify=False requests
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class URLCheckerBackend(BackendService):
@@ -33,7 +30,7 @@ class URLCheckerBackend(BackendService):
         """Lookup by identifier (not used for URL checker)."""
         return {"status": "not_found"}
 
-    def lookup_by_title(self, title: str) -> dict:
+    def lookup_by_title(self, title: str, full_ref: str = "") -> dict:
         """Title search not implemented for URL checker."""
         return {"status": "not_found"}
 
@@ -63,7 +60,7 @@ class URLCheckerBackend(BackendService):
 
     def _fetch_page(self, url: str, headers: dict) -> requests.Response:
         """Fetch a URL, following at most one HTML meta-refresh redirect."""
-        response = requests.get(url, headers=headers, timeout=10, verify=False)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
         # Follow HTML meta-refresh redirects (e.g. <meta http-equiv="refresh" ...>)
@@ -87,7 +84,7 @@ class URLCheckerBackend(BackendService):
                 if not redirect_url.startswith("http"):
                     redirect_url = url.rstrip("/") + "/" + redirect_url.lstrip("./")
                 logger.debug(f"  → Following meta-refresh to: {redirect_url}")
-                response = requests.get(redirect_url, headers=headers, timeout=10, verify=False)
+                response = requests.get(redirect_url, headers=headers, timeout=10)
                 response.raise_for_status()
 
         return response
@@ -199,7 +196,7 @@ class URLCheckerBackend(BackendService):
                 ref_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', reference_title)}
                 page_words = {w.lower() for w in re.findall(r'\b[A-Za-z]{3,}\b', title)}
                 overlap = ref_words & page_words
-                if len(overlap) >= 3 and similarity >= 0.20:
+                if len(overlap) >= URL_KEYWORD_OVERLAP_MIN and similarity >= URL_REJECT_FLOOR:
                     logger.debug(f"  [DEBUG] URL check: keyword overlap found ({len(overlap)} words) despite low similarity ({similarity:.2f})")
                 else:
                     logger.debug(f"  - URL check: rejected (similarity {similarity:.2f} < {RELEVANCE_THRESHOLD}, overlap {len(overlap)} words): '{title[:60]}'")
