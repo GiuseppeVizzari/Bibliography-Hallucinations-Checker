@@ -4,7 +4,7 @@ import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Blueprint, render_template, request, flash, redirect, current_app, jsonify
+from flask import Blueprint, render_template, request, current_app, jsonify
 from werkzeug.utils import secure_filename
 from .pdf_processor import extract_bibliography
 from .checkers import check_reference
@@ -106,14 +106,12 @@ def index():
     if request.method == 'POST':
         # Check if file is present
         if 'file' not in request.files:
-            flash('No file part')
-            return redirect(request.url)
+            return jsonify({"error": "No file part"}), 400
 
         file = request.files['file']
 
         if file.filename == '':
-            flash('No selected file')
-            return redirect(request.url)
+            return jsonify({"error": "No selected file"}), 400
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
@@ -127,8 +125,7 @@ def index():
             try:
                 refs = extract_bibliography(filepath)
                 if not refs:
-                    flash('No references found or bibliography section not detected.')
-                    return redirect(request.url)
+                    return jsonify({"error": "No references found or bibliography section not detected."}), 400
 
                 total_refs = len(refs)
 
@@ -155,44 +152,10 @@ def index():
                     daemon=True
                 ).start()
 
-                # Detect AJAX request via X-Requested-With header
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return jsonify({"job_id": job_id, "status": "processing"})
-
-                # Fallback: synchronous processing for non-AJAX clients
-                results = [None] * total_refs
-                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    futures = {
-                        executor.submit(_check_single_ref, i, ref, total_refs): i
-                        for i, ref in enumerate(refs, 1)
-                    }
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                            results[result["number"] - 1] = result
-                        except Exception as e:
-                            logger.error(f"Error in worker: {e}", exc_info=True)
-                            idx = futures[future]
-                            results[idx - 1] = {
-                                "original": refs[idx - 1],
-                                "original_url": None,
-                                "check": {"status": "error", "message": str(e), "similarity": 0.0},
-                                "number": idx
-                            }
-
-                logger.info(f"\n{'='*60}")
-                logger.info(f"Processing complete!")
-                logger.info(f"{'='*60}\n")
-
-                return render_template('results.html', results=results, total_count=total_refs)
+                return jsonify({"job_id": job_id, "status": "processing"})
 
             except Exception as e:
                 logger.error(f"Error processing file: {e}", exc_info=True)
-                flash(f'Error processing file: {str(e)}')
-                return redirect(request.url)
-            finally:
-                # Cleanup
-                if os.path.exists(filepath):
-                    os.remove(filepath)
+                return jsonify({"error": str(e)}), 500
 
     return render_template('index.html')
