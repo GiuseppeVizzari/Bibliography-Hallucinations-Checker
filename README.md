@@ -121,7 +121,7 @@ docker run -p 8000:8000 --env-file .env bibcheck
 
 ```
 PDF Upload → Bibliography Detection → Reference Splitting → 
-Identifier Extraction → 5-Step Verification → Similarity Scoring → Results
+Identifier Extraction → 6-Step Verification → Similarity Scoring → Results
 ```
 
 ### 1. Bibliography Detection
@@ -155,7 +155,7 @@ Hyphenated words broken across PDF lines (e.g. `be-\nhaviors`) are automatically
 
 DOIs, arXiv IDs, and bare URLs are extracted from each reference. A multi-strategy **title extraction** cascade (8 strategies) handles quoted titles, author-year punctuation (APA/Chicago), comma-delimited styles, content-based heuristics, and colon-separated LNCS/Springer formats, while rejecting false positives such as author lists, page-number ranges, and venue abbreviations.
 
-### 6. Five-Step Verification Pipeline
+### 6. Six-Step Verification Pipeline
 
 Each reference is checked in priority order:
 
@@ -208,7 +208,8 @@ app/
 
 - ✅ **Hallucination Detection**: Visual cues (badges and row highlighting) flag found references that differ significantly from the PDF text.
 - ✅ **Parallel Processing**: References are verified concurrently (4 workers) for significantly faster processing.
-- ✅ **Progress Indicator**: Real-time progress bar shows verification status during processing.
+- ✅ **Progress Indicator**: Real-time progress bar shows verification status during processing, powered by AJAX polling for smooth, up-to-the-second updates.
+- ✅ **AJAX Polling**: Background processing with automatic progress polling — the page updates in real-time without a full reload.
 - ✅ **Multi-language Bibliography Headers**: Supports English and Italian section titles, plus common OCR/typo variants.
 - ✅ **Appendix Termination**: Automatically stops collecting references at ~30 termination keywords, including lettered appendix tables and numeric table rows.
 - ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
