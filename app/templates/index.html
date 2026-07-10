@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="card shadow-sm">
+<div class="card shadow-sm" id="upload-card">
     <div class="card-body">
         <h5 class="card-title">Check your PDF</h5>
         <p class="card-text">Upload a PDF paper. We will extract the bibliography and verify references against <strong>OpenAlex</strong>.</p>
@@ -11,14 +11,272 @@
         <div class="alert alert-secondary">
             <small><strong>File limit:</strong> Maximum 16MB</small>
         </div>
-        <form method="post" enctype="multipart/form-data" class="mt-4">
+        <form method="post" enctype="multipart/form-data" class="mt-4" id="upload-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
                 <label for="file" class="form-label">Select PDF file</label>
                 <input class="form-control" type="file" id="file" name="file" accept=".pdf" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">Check Bibliography</button>
+            <button type="submit" class="btn btn-primary w-100" id="submit-btn">Check Bibliography</button>
         </form>
     </div>
 </div>
+
+<!-- Processing overlay (hidden by default) -->
+<div class="card shadow-sm" id="processing-card" style="display: none;">
+    <div class="card-body text-center">
+        <h5 class="card-title">Processing Bibliography</h5>
+        <p class="card-text text-muted">Extracting and verifying references...</p>
+        <div class="mb-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <div class="progress" style="height: 24px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 id="progress-bar"
+                 role="progressbar"
+                 style="width: 0%;"
+                 aria-valuenow="0"
+                 aria-valuemin="0"
+                 aria-valuemax="100">
+                <span id="progress-text">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results container (populated by AJAX) -->
+<div id="results-container"></div>
+
+<script>
+(function () {
+    const uploadForm = document.getElementById('upload-form');
+    const uploadCard = document.getElementById('upload-card');
+    const processingCard = document.getElementById('processing-card');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const resultsContainer = document.getElementById('results-container');
+    let pollTimer = null;
+
+    uploadForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        // Disable button and show processing
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = true;
+        uploadCard.style.display = 'none';
+        processingCard.style.display = 'block';
+        resultsContainer.innerHTML = '';
+
+        const formData = new FormData(uploadForm);
+
+        // Step 1: Upload file and get job_id
+        fetch('/', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (response) {
+            if (!response.ok) throw new Error('Upload failed');
+            return response.json();
+        })
+        .then(function (data) {
+            if (data.job_id) {
+                // Step 2: Poll for progress
+                pollStatus(data.job_id);
+            } else if (data.results) {
+                // Synchronous fallback: render results directly
+                renderResults(data.results, data.total_count);
+                resetUI();
+            } else {
+                throw new Error('Unexpected response');
+            }
+        })
+        .catch(function (err) {
+            processingCard.style.display = 'none';
+            uploadCard.style.display = 'block';
+            submitBtn.disabled = false;
+            alert('Error: ' + err.message);
+        });
+    });
+
+    function pollStatus(jobId) {
+        pollTimer = setInterval(function () {
+            fetch('/status/' + jobId)
+            .then(function (response) {
+                if (!response.ok) throw new Error('Status check failed');
+                return response.json();
+            })
+            .then(function (data) {
+                // Update progress bar
+                if (data.total > 0) {
+                    const pct = Math.round((data.checked / data.total) * 100);
+                    progressBar.style.width = pct + '%';
+                    progressBar.setAttribute('aria-valuenow', pct);
+                    progressText.textContent = pct + '%';
+                }
+
+                if (data.status === 'complete') {
+                    clearInterval(pollTimer);
+                    processingCard.style.display = 'none';
+                    renderResults(data.results, data.total);
+                    resetUI();
+                } else if (data.status === 'error') {
+                    clearInterval(pollTimer);
+                    processingCard.style.display = 'none';
+                    uploadCard.style.display = 'block';
+                    submitBtn.disabled = false;
+                    alert('Processing error: ' + (data.error || 'Unknown error'));
+                }
+                // else: still processing, keep polling
+            })
+            .catch(function (err) {
+                clearInterval(pollTimer);
+                processingCard.style.display = 'none';
+                uploadCard.style.display = 'block';
+                submitBtn.disabled = false;
+                alert('Status check failed: ' + err.message);
+            });
+        }, 1000); // Poll every 1 second
+    }
+
+    function renderResults(results, totalCount) {
+        // Build results table HTML
+        let html = '<div class="d-flex justify-content-between align-items-center mb-3">';
+        html += '<h3>Analysis Results</h3>';
+        html += '<a href="' + window.location.href + '" class="btn btn-outline-secondary">Check Another</a>';
+        html += '</div>';
+
+        html += '<div class="alert alert-info">';
+        html += '<strong>Processed ' + totalCount + ' references</strong> using multiple verification sources.';
+        html += '</div>';
+
+        html += '<div class="table-responsive">';
+        html += '<table class="table table-bordered table-hover">';
+        html += '<thead><tr>';
+        html += '<th style="width: 4%">#</th>';
+        html += '<th style="width: 26%">Extracted Reference</th>';
+        html += '<th style="width: 10%">Status</th>';
+        html += '<th style="width: 10%">Source</th>';
+        html += '<th style="width: 50%">Online Data</th>';
+        html += '</tr></thead><tbody>';
+
+        for (let i = 0; i < results.length; i++) {
+            const item = results[i];
+            const sim = (item.check.similarity || 0) * 100;
+            const lowSim = item.check.status === 'found' && sim < 60;
+
+            html += '<tr' + (lowSim ? ' style="background-color: #fd7e14 !important;"' : '') + '>';
+            html += '<td class="text-center"><strong>' + item.number + '</strong></td>';
+
+            // Extracted reference
+            html += '<td class="small">';
+            html += escapeHtml(item.original);
+            if (item.original_url) {
+                html += '<div class="mt-1">';
+                html += '<a href="' + escapeHtml(item.original_url) + '" target="_blank" rel="noopener noreferrer" class="badge bg-light text-secondary border text-decoration-none" style="font-size: 0.75rem;">🔗 Source</a>';
+                html += '</div>';
+            }
+            html += '</td>';
+
+            // Status badge
+            html += '<td class="text-center">';
+            if (item.check.status === 'found') {
+                if (sim >= 60) {
+                    html += '<span class="badge bg-success">Found</span>';
+                } else {
+                    html += '<span class="badge" style="background-color: #fd7e14 !important; color: white !important;">Check Match</span>';
+                }
+            } else if (item.check.status === 'candidate') {
+                html += '<span class="badge bg-info">Candidate</span>';
+            } else if (item.check.status === 'skipped') {
+                html += '<span class="badge bg-secondary">Skipped</span>';
+            } else if (item.check.status === 'error') {
+                html += '<span class="badge" style="background-color: #fd7e14 !important;">Error</span>';
+            } else {
+                html += '<span class="badge bg-danger">Not Found</span>';
+            }
+            html += '</td>';
+
+            // Source badge
+            html += '<td class="text-center">';
+            if (item.check.status === 'found' || item.check.status === 'candidate') {
+                const sourceClass = {
+                    'OpenAlex': 'bg-primary',
+                    'Crossref': 'bg-info',
+                    'DataCite': 'bg-success',
+                    'arXiv': 'bg-dark'
+                };
+                const cls = sourceClass[item.check.source] || 'bg-secondary';
+                html += '<span class="badge ' + cls + '">' + escapeHtml(item.check.source) + '</span>';
+            } else {
+                html += '<span class="text-muted">—</span>';
+            }
+            html += '</td>';
+
+            // Online data
+            html += '<td class="small">';
+            if (item.check.status === 'found' || item.check.status === 'candidate') {
+                const url = item.check.url && item.check.url !== '#' ? item.check.url : null;
+                if (url) {
+                    html += '<strong><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.check.title) + '</a></strong><br>';
+                } else {
+                    html += '<strong>' + escapeHtml(item.check.title) + '</strong><br>';
+                }
+                html += '<em>' + escapeHtml(item.check.author) + '</em><br>';
+                html += escapeHtml(item.check.venue) + ' (' + escapeHtml(item.check.pub_year) + ')<br>';
+
+                html += '<div class="d-flex justify-content-between align-items-center mt-1">';
+                if (url) {
+                    html += '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="small">🔗 Link</a>';
+                }
+                if (item.check.status === 'candidate') {
+                    html += '<span class="badge bg-light text-dark border border-info small">Web Suggestion</span>';
+                }
+                let simClass = sim >= 80 ? 'text-success border-success' : (sim >= 60 ? 'bg-light text-dark border-warning' : 'text-danger border-danger');
+                if (sim >= 60 && sim < 80) simClass += '" style="color: #fd7e14 !important; border-color: #fd7e14 !important;';
+                html += '<span class="badge border ' + simClass + ' small">Similarity: ' + Math.round(sim) + '%</span>';
+                html += '</div>';
+
+                if (item.check.status === 'candidate') {
+                    html += '<div class="text-info mt-1" style="font-size: 0.75rem;"><strong>Suggestion:</strong> Check this link manually.</div>';
+                }
+                if (sim < 60 && item.check.status !== 'candidate') {
+                    html += '<div class="text-danger mt-1" style="font-size: 0.75rem;"><strong>Caution:</strong> Found reference title differs significantly from extracted text.</div>';
+                }
+            } else if (item.check.status === 'error') {
+                html += '<span style="color: #fd7e14 !important;"><strong>Error occurred:</strong> ' + escapeHtml(item.check.message) + '</span>';
+            } else if (item.check.status === 'skipped') {
+                html += '<span class="text-muted">' + escapeHtml(item.check.reason) + '</span>';
+            } else {
+                html += '<span class="text-muted">No match found across available verification sources.</span>';
+            }
+            html += '</td></tr>';
+        }
+
+        html += '</tbody></table></div>';
+
+        // Back to top button
+        html += '<a href="#" id="back-to-top" title="Back to top" style="display: none; position: fixed; z-index: 1000; width: 2.75rem; height: 2.75rem; right: 2rem; bottom: 2rem; border-radius: 50%; background: #0d6efd; color: #fff; font-size: 1.25rem; text-align: center; line-height: 2.75rem; text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.25); transition: opacity .2s;">↑</a>';
+        html += '<script>';
+        html += '(function () { var btn = document.getElementById(\'back-to-top\'); window.addEventListener(\'scroll\', function () { btn.style.display = window.scrollY > 300 ? \'block\' : \'none\'; }); btn.addEventListener(\'click\', function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: \'smooth\' }); }); })();';
+        html += '<\/script>';
+
+        resultsContainer.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    function resetUI() {
+        uploadForm.reset();
+        document.getElementById('submit-btn').disabled = false;
+    }
+})();
+</script>
 {% endblock %}
