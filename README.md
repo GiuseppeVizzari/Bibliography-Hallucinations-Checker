@@ -4,7 +4,11 @@ A Flask web application that extracts bibliographic references from PDFs and ver
 
 ## Quick Start
 
-### 1. Set up Virtual Environment
+### 1. Install the Package
+
+Choose the installation method that suits your workflow:
+
+#### Option A — Install from local source (recommended)
 
 ```bash
 # Create virtual environment (recommended)
@@ -15,13 +19,36 @@ source .venv/bin/activate  # On macOS/Linux
 # or
 .venv\Scripts\activate  # On Windows
 
-# Install dependencies
+# Install from local source
+pip install .
+```
+
+This installs the `bibcheck` package and all its dependencies. The virtual environment approach is recommended because it isolates dependencies from your system Python installation and prevents conflicts with other Python projects.
+
+#### Option B — Install via requirements.txt
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate  # On Windows
+
 pip install -r requirements.txt
 ```
 
-The virtual environment approach is recommended because:
-1. It isolates dependencies from your system Python installation
-2. It prevents conflicts with other Python projects on your system
+Use this approach if you want to pin exact dependency versions or manage them through the requirements file.
+
+#### Option C — Install in development mode (editable)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+
+# Editable install — changes to source code take effect immediately
+pip install -e ".[dev]"
+```
+
+This is useful when you're actively developing the project and want to test changes without reinstalling.
 
 ### 2. Configure Environment Variables
 
@@ -50,6 +77,42 @@ To capture all output to a log file:
 
 ```bash
 python run.py > debug.log 2>&1
+```
+
+### Production Deployment
+
+The app includes a WSGI entry point (`wsgi.py`) for deployment with a production-grade ASGI/WSGI server such as **gunicorn**:
+
+```bash
+# Install gunicorn
+pip install gunicorn
+
+# Run with gunicorn (4 workers, bound to localhost)
+gunicorn --workers 4 --bind 127.0.0.1:8000 wsgi:app
+```
+
+**Before deploying:**
+
+1. Set `SECRET_KEY` to a strong, randomly generated value in your `.env` file.
+2. Ensure `FLASK_DEBUG` is **not** set (or set to `0`) — debug mode must be disabled in production.
+3. Place `.env` on the server with restrictive permissions (`chmod 600 .env`).
+4. Put gunicorn behind a reverse proxy (nginx, Caddy) for TLS termination and static file handling.
+
+**Docker example:**
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+ENV FLASK_DEBUG=0
+CMD ["gunicorn", "--workers", "4", "--bind", "0.0.0.0:8000", "wsgi:app"]
+```
+
+```bash
+docker build -t bibcheck .
+docker run -p 8000:8000 --env-file .env bibcheck
 ```
 
 ## How It Works
@@ -202,7 +265,7 @@ If you encounter errors like `ModuleNotFoundError: No module named 'ddgs'`, make
 
 ```bash
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install .
 ```
 
 ## Acknowledgments
