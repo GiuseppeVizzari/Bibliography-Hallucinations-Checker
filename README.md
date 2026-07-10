@@ -63,7 +63,7 @@ Identifier Extraction → 5-Step Verification → Similarity Scoring → Results
 
 ### 1. Bibliography Detection
 
-The app parses the PDF via PyMuPDF, extracting text blocks with layout preservation. Two-column layouts are handled by sorting blocks left-to-right, top-to-bottom. It recognises a broad set of section headers: English (`References`, `Bibliography`, `Works Cited`), Italian (`Bibliografia`, `Riferimenti`), and common typos (`Rererences`). Table-of-contents entries (containing trailing page numbers or dotted leaders) are rejected heuristically.
+The app parses the PDF via PyMuPDF, extracting text blocks with layout preservation. Blocks spanning more than 60% of a page's height are always kept (preventing tall content like figures or wide tables from being accidentally filtered as margins). Two-column layouts are handled by sorting blocks left-to-right, top-to-bottom. It recognises a broad set of section headers: English (`References`, `Bibliography`, `Works Cited`), Italian (`Bibliografia`, `Riferimenti`), and common typos (`Rererences`). Table-of-contents entries (containing trailing page numbers or dotted leaders) are rejected heuristically.
 
 ### 2. Appendix & Garbage Skipping
 
@@ -150,7 +150,9 @@ app/
 - ✅ **Appendix Termination**: Automatically stops collecting references at ~30 termination keywords, including lettered appendix tables and numeric table rows.
 - ✅ **Two-Column Layout Support**: Left-to-right, top-to-bottom block sorting handles common PDF layouts.
 - ✅ **Line Number Filtering**: Three-layer filter removes marginal and embedded line numbers that would otherwise corrupt reference text.
-- ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces.
+- ✅ **Hyphenated Word Rejoining**: Words broken across PDF lines with hyphens are rejoined, including uppercase continuations (e.g. `Multi-\nTarget` → `MultiTarget`) for title-case words common in reference titles.
+- ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces. Trailing punctuation (`.`, `,`, `;`, `)`, `]`) is stripped from extracted DOIs to prevent false mismatches.
+- ✅ **Multi-Page Reference Merging**: References that span page boundaries are automatically detected and merged by comparing consecutive block page indices.
 - ✅ **Six-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, web search fallback, and direct URL resource fetching.
 - ✅ **Partial arXiv Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Rate Limiting & Retry**: Automatic exponential backoff for rate-limited APIs (arXiv, DataCite, OpenAlex).

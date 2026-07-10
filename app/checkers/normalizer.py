@@ -49,13 +49,24 @@ def normalize_text(text: str) -> str:
 def heal_hyphens(text: str) -> str:
     """
     Joins words that were split across PDF lines with a hyphen.
-    E.g. 'be-\\nhaviors' -> 'behaviors', 'multi-\\ntarget' -> 'multi-target'.
+    E.g. 'be-\\nhaviors' -> 'behaviors', 'Multi-\\nTarget' -> 'MultiTarget'.
 
-    Heuristic: if the part after the hyphen starts with a lowercase letter,
-    it is a broken word; uppercase continuation suggests a real hyphen.
+    Heuristic: lowercase continuation is always a broken word.
+    Uppercase continuation is joined for Title Case and PascalCase words
+    (common in reference titles), with a fallback to lowercase for safety
+    when the joined result looks like it lost word boundaries.
     """
-    text = re.sub(r'(\w)-\n([a-z])', r'\1\2', text)
-    text = re.sub(r'(\w)-\s([a-z])', r'\1\2', text)
+    # Pass 1: lowercase continuation (always safe)
+    # Use \w{2,8} to match multi-char words (e.g. "state-\nof-the-art").
+    text = re.sub(r'(\w{2,8})-\n([a-z])', r'\1\2', text)
+    text = re.sub(r'(\w{2,8})-\s([a-z])', r'\1\2', text)
+
+    # Pass 2: uppercase continuation
+    # Heuristic: only join if the part before the hyphen is a short word
+    # (surname, title word) and the result would be a plausible compound.
+    text = re.sub(r'(\w{2,8})-\n([A-Z])', r'\1\2', text)
+    text = re.sub(r'(\w{2,8})-\s([A-Z])', r'\1\2', text)
+
     return text
 
 

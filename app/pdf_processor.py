@@ -69,7 +69,13 @@ def extract_bibliography(pdf_path):
         for b in blocks:
             if b[6] == 0:
                 y0, y1 = b[1], b[3]
-                if y0 < margin or y1 > (page_height - margin):
+
+                # Blocks spanning >60% of page height are content, not footers
+                block_height = y1 - y0
+                height_ratio = block_height / page_height if page_height > 0 else 0
+                if height_ratio > 0.6:
+                    pass  # Keep this block regardless of vertical position
+                elif y0 < margin or y1 > (page_height - margin):
                     continue
 
                 # Skip marginal line-number blocks (narrow, near edge, purely numeric)
@@ -193,6 +199,39 @@ def extract_bibliography(pdf_path):
         ref_content.append(block_text)
 
     logger.debug(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
+
+    # P2: Multi-page fallback — detect page gaps in consecutive blocks and merge
+    # across the gap. This handles references that span page boundaries.
+    merged_content = []
+    i = 0
+    while i < len(ref_content):
+        block_idx = ref_start_index + 1 + i
+        page_curr = all_blocks[block_idx][7] if block_idx < len(all_blocks) else -1
+
+        if i + 1 < len(ref_content):
+            block_idx_next = ref_start_index + 1 + (i + 1)
+            page_next = all_blocks[block_idx_next][7] if block_idx_next < len(all_blocks) else -1
+            page_gap = page_next - page_curr
+
+            if page_gap > 1:
+                merged = ref_content[i]
+                j = i + 1
+                while j < len(ref_content):
+                    block_idx_j = ref_start_index + 1 + j
+                    page_j = all_blocks[block_idx_j][7] if block_idx_j < len(all_blocks) else -1
+                    if page_j == page_curr + 1:
+                        break
+                    merged += "\n" + ref_content[j]
+                    j += 1
+                merged_content.append(merged)
+                i = j
+                continue
+
+        merged_content.append(ref_content[i])
+        i += 1
+
+    ref_content = merged_content
+    logger.debug(f"  [DEBUG] After multi-page merge: {len(ref_content)} blocks")
 
     full_ref_text = "\n".join(ref_content)
 

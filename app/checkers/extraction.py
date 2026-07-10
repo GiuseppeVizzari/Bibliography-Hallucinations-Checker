@@ -393,7 +393,8 @@ def extract_doi_info(ref_text: str):
     pattern = r'10\.\d{4,9}/[-._;()/:a-zA-Z0-9]*'
     match = re.search(pattern, ref_text)
     if match:
-        return match.group(0), match.end()
+        doi = match.group(0).rstrip('.,;)]')
+        return doi, match.end()
 
     # Fallback: match '10.' followed by whitespace (broken DOI prefix)
     partial = _PARTIAL_DOI_RE.search(ref_text)
