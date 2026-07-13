@@ -285,5 +285,3 @@ This project is built using several powerful open-source libraries and APIs:
 - **[Requests](https://requests.readthedocs.io/)**: To handle all API communications.
 - **[beautifulsoup4](https://www.beautifulsoup.com/)**: For parsing HTML content during web fallback.
 - **[duckduckgo-search (ddgs)](https://pypi.org/project/duckduckgo-search/)**: For performing privacy-respecting web searches without an API key.
-- **URL Extraction**: Enhanced reference parsing to extract and utilize direct URLs (e.g., DOIs, arXiv IDs) found in the original text before resorting to web search.
-- **Partial ARXIV Identifiers**: Added support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
