@@ -141,10 +141,10 @@ def extract_bibliography(pdf_path):
 
     ref_start_index = candidates[0] if candidates else -1
     if ref_start_index != -1:
-        logger.debug(f"  [DEBUG] Bibliography section found at block {ref_start_index}: '{all_blocks[ref_start_index][4].strip()[:60]}'")
+        logger.info(f"Bibliography section found at block {ref_start_index}")
 
     if ref_start_index == -1:
-        logger.debug("  [DEBUG] Could not find bibliography section header in any block.")
+        logger.warning("  Could not find bibliography section header in any block.")
         return []
 
     # 3. Concatenate text until the end of references or a termination header
@@ -159,7 +159,7 @@ def extract_bibliography(pdf_path):
         "credit", "credit author statement", "author statement", "use of generative", "generative ai"
     ]
 
-    logger.debug(f"  [DEBUG] Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
+    logger.info(f"Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
     for i in range(ref_start_index + 1, len(all_blocks)):
         block_text = all_blocks[i][4].strip()
         lower_text = block_text.lower()
@@ -198,7 +198,7 @@ def extract_bibliography(pdf_path):
         logger.debug(f"  [DEBUG]   INCLUDE block {i} ({len(lower_text.split())} words): '{first_line}'")
         ref_content.append(block_text)
 
-    logger.debug(f"  [DEBUG] Total blocks collected for bibliography: {len(ref_content)}")
+    logger.info(f"Total blocks collected for bibliography: {len(ref_content)}")
 
     # P2: Multi-page fallback — detect page gaps in consecutive blocks and merge
     # across the gap. This handles references that span page boundaries.
@@ -231,7 +231,7 @@ def extract_bibliography(pdf_path):
         i += 1
 
     ref_content = merged_content
-    logger.debug(f"  [DEBUG] After multi-page merge: {len(ref_content)} blocks")
+    logger.info(f"After multi-page merge: {len(ref_content)} blocks")
 
     full_ref_text = "\n".join(ref_content)
 
@@ -266,6 +266,7 @@ def extract_bibliography(pdf_path):
         refs = [prune_trailing_garbage(r) for r in refs]
         refs = [cleanup_ref(r) for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
+        logger.info(f"Split into {len(refs)} references (Strategy A: bracketed numbers)")
         return refs
 
     # Strategy B: Numbered 1., 2.
@@ -274,6 +275,7 @@ def extract_bibliography(pdf_path):
         refs = [prune_trailing_garbage(r) for r in refs]
         refs = [cleanup_ref(r) for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 10]
+        logger.info(f"Split into {len(refs)} references (Strategy B: numbered)")
         return refs
 
     # Strategy D: Author-year [Author, Year] style
@@ -284,6 +286,7 @@ def extract_bibliography(pdf_path):
         refs = [prune_trailing_garbage(r) for r in refs]
         refs = [cleanup_ref(r) for r in refs if r.strip()]
         refs = [r for r in refs if len(r) > 20]
+        logger.info(f"Split into {len(refs)} references (Strategy D: author-year)")
         return refs
 
     # Strategy C: Fallback — one block per reference
@@ -294,4 +297,5 @@ def extract_bibliography(pdf_path):
         if len(text) > 20:
             raw_refs.append(text)
 
+    logger.info(f"Split into {len(raw_refs)} references (Strategy C: fallback)")
     return raw_refs

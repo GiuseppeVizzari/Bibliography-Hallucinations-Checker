@@ -12,9 +12,10 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
     app.config['WTF_CSRF_ENABLED'] = True
 
-    # Configure logging: debug-level output to stdout
+    # Configure logging: level controlled by LOG_LEVEL env var (default: INFO)
+    log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=getattr(logging, log_level, logging.INFO),
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
         stream=None,  # defaults to stderr
     )

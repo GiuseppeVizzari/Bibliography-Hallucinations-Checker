@@ -142,16 +142,16 @@ def check_reference(ref_text: str) -> dict:
         }
     """
     if not ref_text or len(ref_text) < 10:
+        logger.info("  → Skipped: Too short")
         return {"status": "skipped", "reason": "Too short", "similarity": 0.0,
                 "original_url": build_original_url(ref_text)}
 
-    logger.debug(f"\n[DEBUG] Checking reference...")
-    logger.debug(f"  Original: {ref_text[:100]}...")
+    logger.info(f"  Checking reference: {ref_text[:80]}...")
 
     try:
         extracted_title = extract_title_from_reference(ref_text)
     except Exception as e:
-        logger.debug(f"  - Title extraction failed: {e}")
+        logger.warning(f"  Title extraction failed: {e}")
         extracted_title = ""
 
     result = None
@@ -161,14 +161,14 @@ def check_reference(ref_text: str) -> dict:
         doi, end_pos = extract_doi_info(ref_text)
         if doi:
             doi_clean = strip_doi_punctuation(doi)
-            logger.debug(f"  → Found DOI: {doi_clean}")
+            logger.info(f"  → Step 1 DOI: {doi_clean}")
             result = _run_doi_search_cycle(doi_clean)
 
             # --- Step 2: DOI healing ---
             if not result or result["status"] != "found":
-                logger.debug("  → DOI not found. Attempting to heal/expand...")
                 healed_doi, _ = heal_doi(doi_clean, end_pos, ref_text)
                 if healed_doi:
+                    logger.info(f"  → Step 2 DOI healed: {doi_clean} -> {healed_doi}")
                     result = _run_doi_search_cycle(healed_doi)
 
         # --- Step 3: arXiv ---
@@ -176,14 +176,14 @@ def check_reference(ref_text: str) -> dict:
             arxiv_id = extract_arxiv_id_from_text(ref_text)
 
             if arxiv_id:
-                logger.debug(f"  → Found arXiv ID: {arxiv_id}")
+                logger.info(f"  → Step 3 arXiv: {arxiv_id}")
                 result = _get_arxiv().lookup_by_id(arxiv_id)
 
         # --- Step 4: URL checker (direct URL from reference) ---
         if not result or result["status"] != "found":
             urls = _get_url_checker().extract_urls(ref_text)
             for url in urls:
-                logger.debug(f"  → Trying URL from reference: {url}")
+                logger.info(f"  → Step 4 URL: {url}")
                 result = _get_url_checker().lookup_by_url(url, extracted_title)
                 if result["status"] == "found":
                     break
@@ -193,29 +193,27 @@ def check_reference(ref_text: str) -> dict:
 
         # --- Step 5: Title search ---
         if not result or result["status"] != "found":
-            logger.debug(f"  Extracted title: {extracted_title[:80]}...")
-            logger.debug("  → Falling back to title search...")
+            logger.info(f"  → Step 5 Title: {extracted_title[:60]}...")
             result = _get_openalex().lookup_by_title(extracted_title)
 
             # Fallback if the match is poor (< WEB_FALLBACK_TRIGGER similarity)
             if result and result.get("status") == "found":
                 sim = calculate_similarity(extracted_title, result.get("title", ""))
                 if sim < WEB_FALLBACK_TRIGGER:
-                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying DBLP...")
                     result = {"status": "not_found"}
 
         # --- Step 5b: DBLP title search (CS conference fallback) ---
         if not result or result["status"] != "found":
-            logger.debug("  → Trying DBLP title search...")
+            logger.info("  → Step 5b DBLP")
             result = _get_dblp().lookup_by_title(extracted_title)
 
         # --- Step 6: Web search fallback (last resort) ---
         if not result or result["status"] != "found":
-            logger.debug("  → Falling back to web search...")
+            logger.info("  → Step 6 Web search")
             result = _get_web_fallback().lookup_by_title(extracted_title, full_ref=ref_text)
 
     except Exception as e:
-        logger.debug(f"  - Unexpected error in verification pipeline: {e}")
+        logger.error(f"  Pipeline error: {e}")
         return {"status": "error", "message": str(e), "similarity": 0.0,
                 "original_url": build_original_url(ref_text)}
 
@@ -225,14 +223,13 @@ def check_reference(ref_text: str) -> dict:
             fetched_title = result.get("title", "")
             similarity = calculate_similarity(extracted_title, fetched_title)
             result["similarity"] = similarity
-            logger.debug(f"  [DEBUG] Similarity comparison:")
-            logger.debug(f"  [DEBUG]   Extracted title: '{extracted_title}'")
-            logger.debug(f"  [DEBUG]   Fetched title:   '{fetched_title}'")
-            logger.debug(f"  [DEBUG]   Score: {similarity:.2f}")
+            logger.info(f"  ✓ Result: found (source: {result.get('source', 'N/A')}, similarity: {similarity:.2f})")
         else:
             result["similarity"] = 0.0
+            logger.info(f"  → Result: not_found")
     else:
         result = {"status": "not_found", "similarity": 0.0}
+        logger.info(f"  → Result: not_found")
 
     result["original_url"] = build_original_url(ref_text)
 
