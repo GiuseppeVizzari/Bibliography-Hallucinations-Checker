@@ -9,6 +9,7 @@ Lookup priority:
   3. arXiv ID
   4. URL checker (direct URL from reference)
   5. Title search (OpenAlex)
+  5b. DBLP title search (CS conference fallback)
   6. Web search fallback (DuckDuckGo)
 
 Similarity scoring is applied to every result to help the UI flag
@@ -32,7 +33,8 @@ from .backends import (
     DataCiteBackend,
     ArxivBackend,
     URLCheckerBackend,
-    WebFallbackBackend
+    WebFallbackBackend,
+    DBLPBackend,
 )
 
 # --- Cached backend singletons (thread-safe after lazy init) ---
@@ -43,6 +45,7 @@ _datacite = None
 _arxiv = None
 _url_checker = None
 _web_fallback = None
+_dblp = None
 
 
 def _get_openalex():
@@ -85,6 +88,13 @@ def _get_web_fallback():
     if _web_fallback is None:
         _web_fallback = WebFallbackBackend()
     return _web_fallback
+
+
+def _get_dblp():
+    global _dblp
+    if _dblp is None:
+        _dblp = DBLPBackend()
+    return _dblp
 
 
 def _run_doi_search_cycle(doi: str) -> dict:
@@ -191,8 +201,13 @@ def check_reference(ref_text: str) -> dict:
             if result and result.get("status") == "found":
                 sim = calculate_similarity(extracted_title, result.get("title", ""))
                 if sim < WEB_FALLBACK_TRIGGER:
-                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying web search...")
+                    logger.debug(f"  [DEBUG] OpenAlex match too weak (similarity {sim:.2f} < {WEB_FALLBACK_TRIGGER:.2f}). Trying DBLP...")
                     result = {"status": "not_found"}
+
+        # --- Step 5b: DBLP title search (CS conference fallback) ---
+        if not result or result["status"] != "found":
+            logger.debug("  → Trying DBLP title search...")
+            result = _get_dblp().lookup_by_title(extracted_title)
 
         # --- Step 6: Web search fallback (last resort) ---
         if not result or result["status"] != "found":

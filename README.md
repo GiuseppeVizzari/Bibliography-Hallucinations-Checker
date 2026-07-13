@@ -165,7 +165,8 @@ Each reference is checked in priority order:
 | 2 | DOI healing | (retry cycle) | Reconstructs DOIs broken by PDF line-wrapping, including `10.` prefix splits |
 | 3 | arXiv ID | arXiv API | Direct Atom feed lookup |
 | 4 | URL resource | Direct fetch | Downloads HTML/PDF from a bare URL in the reference, follows meta-refresh redirects, extracts `<title>`, compares against reference; tries all non-DOI/non-arXiv URLs |
-| 5 | Title search | OpenAlex → Web Search | OpenAlex title search; falls back to DuckDuckGo web search if no match or similarity < 0.6 |
+| 5 | Title search | OpenAlex → DBLP | OpenAlex title search; falls back to DBLP for CS conference/journal proceedings |
+| 5b | Title search fallback | DBLP | CS conference/journal proceedings fallback when OpenAlex returns a weak match |
 | 6 | Web fallback | DuckDuckGo + scraping | Web search with page-title verification for non-academic references (last resort) |
 
 ### 7. Similarity Scoring
@@ -217,7 +218,7 @@ app/
 - ✅ **Hyphenated Word Rejoining**: Words broken across PDF lines with hyphens are rejoined, including uppercase continuations (e.g. `Multi-\nTarget` → `MultiTarget`) for title-case words common in reference titles.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces. Trailing punctuation (`.`, `,`, `;`, `)`, `]`) is stripped from extracted DOIs to prevent false mismatches.
 - ✅ **Multi-Page Reference Merging**: References that span page boundaries are automatically detected and merged by comparing consecutive block page indices.
-- ✅ **Six-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, web search fallback, and direct URL resource fetching.
+- ✅ **Seven-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, DBLP (CS conference/journal proceedings), web search fallback, and direct URL resource fetching.
 - ✅ **Partial arXiv Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Rate Limiting & Retry**: Automatic exponential backoff for rate-limited APIs (arXiv, DataCite, OpenAlex).
 - ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
@@ -242,7 +243,7 @@ app/
 
 - **Extracted Reference** — raw text pulled from the PDF. A 🔗 **Source** badge appears below when a DOI, arXiv ID, or URL was found in the original text.
 - **Status** — `Found`, `Check Match`, `Not Found`, `Skipped`, or `Error`.
-- **Source** — which API resolved the reference (OpenAlex, Crossref, DataCite, arXiv, or URL Resource).
+- **Source** — which API resolved the reference (OpenAlex, Crossref, DataCite, arXiv, DBLP, or URL Resource).
 - **Online Data** — the title (clickable link to the paper), authors, venue, year, and similarity score.
 
 ## Troubleshooting
@@ -279,6 +280,7 @@ This project is built using several powerful open-source libraries and APIs:
 - **[habanero](https://github.com/sckott/habanero)**: A low-level client for the **[Crossref API](https://www.crossref.org/)**, providing reliable fallback for DOI lookups.
 - **[DataCite API](https://support.datacite.org/docs/api)**: Used for verifying Zenodo and other repository-hosted DOIs.
 - **[arXiv API](https://arxiv.org/help/api)**: Used for direct verification of pre-print identifiers.
+- **[DBLP API](https://dblp.org/)**: Used for verifying computer science conference and journal proceedings not well covered by OpenAlex.
 - **[python-dotenv](https://github.com/theskumar/python-dotenv)**: For managing environment variables securely.
 - **[Requests](https://requests.readthedocs.io/)**: To handle all API communications.
 - **[beautifulsoup4](https://www.beautifulsoup.com/)**: For parsing HTML content during web fallback.

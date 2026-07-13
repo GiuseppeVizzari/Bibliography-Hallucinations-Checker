@@ -70,12 +70,16 @@
         resultsContainer.innerHTML = '';
 
         const formData = new FormData(uploadForm);
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
         // Step 1: Upload file and get job_id
         fetch('/', {
             method: 'POST',
             body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(function (response) {
             if (!response.ok) throw new Error('Upload failed');
@@ -206,7 +210,8 @@
                     'OpenAlex': 'bg-primary',
                     'Crossref': 'bg-info',
                     'DataCite': 'bg-success',
-                    'arXiv': 'bg-dark'
+                    'arXiv': 'bg-dark',
+                    'DBLP': 'bg-warning text-dark'
                 };
                 const cls = sourceClass[item.check.source] || 'bg-secondary';
                 html += '<span class="badge ' + cls + '">' + escapeHtml(item.check.source) + '</span>';
