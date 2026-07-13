@@ -61,22 +61,16 @@ class TestDBLPBackendLookupByTitle(unittest.TestCase):
         return mock_resp
 
     def _make_hit(self, title, authors, venue, year, dblp_url=""):
-        """Build a single DBLP hit matching the real DBLP API response format.
-        
-        The real DBLP API returns info as a raw XML string (not a dict).
-        """
-        authors_xml = "".join(
-            f'<person name="{a}"/>' for a in authors
-        )
-        xml_str = (
-            f'<result type="inproceedings" key="{dblp_url}">'
-            f'<title>{title}</title>'
-            f'<year>{year}</year>'
-            f'<venue>{venue}</venue>'
-            f'<authors>{authors_xml}</authors>'
-            f'</result>'
-        )
-        return {"info": xml_str}
+        """Build a single DBLP hit matching the real DBLP JSON API response format."""
+        author_list = [{"text": a} for a in authors]
+        info = {
+            "title": title,
+            "authors": {"author": author_list},
+            "year": year,
+            "venue": venue,
+            "key": dblp_url,
+        }
+        return {"info": info}
 
     @patch("app.checkers.backends.dblp.requests.get")
     def test_empty_title_returns_not_found(self, mock_get):

@@ -9,8 +9,7 @@ matches, because DBLP covers CS conference proceedings that OpenAlex indexes poo
 
 import logging
 import time
-import xml.etree.ElementTree as ET
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -29,13 +28,11 @@ logger = logging.getLogger(__name__)
 DBLP_API = "https://dblp.org/search/publ/api"
 
 
-def _parse_authors(xml_authors) -> str:
-    """Extract author names from a DBLP <authors> element."""
-    names = []
-    for person in xml_authors.findall("person"):
-        name = person.get("name", "")
-        if name:
-            names.append(name)
+def _extract_authors(info: Dict[str, Any]) -> str:
+    """Extract author names from a DBLP info dict."""
+    authors_data = info.get("authors", {})
+    author_list = authors_data.get("author", [])
+    names = [a.get("text", "") for a in author_list if a.get("text")]
     if not names:
         return "N/A"
     if len(names) > 3:
@@ -43,33 +40,32 @@ def _parse_authors(xml_authors) -> str:
     return ", ".join(names)
 
 
-def _build_dblp_url(result: ET.Element) -> str:
-    """Build a DBLP URL from a DBLP result element."""
-    href = result.get("url", "")
-    if href and href.startswith("http"):
-        return href
-    return ""
+def _extract_url(info: Dict[str, Any], hit_url: str) -> str:
+    """Build a DBLP URL from info dict and hit-level URL field."""
+    ee = info.get("ee", "")
+    if ee and ee.startswith("http"):
+        return ee
+    dblp_url = info.get("url", "")
+    if dblp_url and dblp_url.startswith("http"):
+        return dblp_url
+    return hit_url if hit_url and hit_url.startswith("http") else ""
 
 
-def _get_text(parent: ET.Element, tag: str) -> str:
-    """Safely get text content of a child element."""
-    el = parent.find(tag)
-    if el is not None and el.text:
-        return el.text.strip()
-    return "N/A"
+def _get_field(info: Dict[str, Any], field: str, default: str = "N/A") -> str:
+    """Safely get a text field from a DBLP info dict."""
+    val = info.get(field)
+    if val is not None:
+        return str(val).strip()
+    return default
 
 
-def _process_dblp_result(result: ET.Element, target_title: str) -> dict:
-    """Convert a DBLP XML result element into the standard result dict with similarity."""
-    title_text = _get_text(result, "title")
-
-    authors_el = result.find("authors")
-    authors = _parse_authors(authors_el) if authors_el is not None else "N/A"
-
-    pub_year = _get_text(result, "year")
-    venue = _get_text(result, "venue")
-
-    url = _build_dblp_url(result)
+def _process_dblp_hit(info: Dict[str, Any], hit_url: str, target_title: str) -> dict:
+    """Convert a DBLP JSON hit into the standard result dict with similarity."""
+    title_text = _get_field(info, "title")
+    authors = _extract_authors(info)
+    pub_year = _get_field(info, "year")
+    venue = _get_field(info, "venue")
+    url = _extract_url(info, hit_url)
 
     similarity = calculate_similarity(target_title, title_text)
 
@@ -147,14 +143,12 @@ class DBLPBackend(BackendService):
                 break
 
             for hit in hit_list:
-                info_xml = hit.get("info", "")
-                if not info_xml:
+                info = hit.get("info", {})
+                if not info or not isinstance(info, dict):
                     continue
 
-                res = _process_dblp_result(
-                    ET.fromstring(info_xml),
-                    title,
-                )
+                hit_url = hit.get("url", "")
+                res = _process_dblp_hit(info, hit_url, title)
 
                 if res["status"] == "found" and res["similarity"] > best_similarity:
                     best_similarity = res["similarity"]
