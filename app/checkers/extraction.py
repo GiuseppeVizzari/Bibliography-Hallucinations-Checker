@@ -284,8 +284,22 @@ def extract_title_from_reference(ref_text: str) -> str:
 
     # --- 5. Author-Year Punctuation Heuristic ---
     # Often titles follow "(Year)" or "Year."
-    year_match = re.search(r'\(?(?:19|20)\d{2}[a-z]?\)?', text)
-    if year_match:
+    # Must skip years that are part of venue names (e.g. "Proceedings of the 2024 ACM...").
+    _VENUE_YEAR_PATTERN = re.compile(
+        r'\b(Proceedings|Conference|Journal|Transactions|Symposium|Workshop|'
+        r'Lecture\s+Notes|ACM|IEEE|Springer|ACIR|ECIR|WSDM|SIGIR|WWW|CHI|'
+        r'ISCA|COLING|ACL|EMNLP|NAACL|ECCV|CVPR|ICCV|NeurIPS|ICML)\b',
+        re.IGNORECASE
+    )
+    for year_match in re.finditer(r'\(?(?:19|20)\d{2}[a-z]?\)?', text):
+        # Check if the matched year is part of a venue name (tight adjacency).
+        # Only flag as venue-year when a venue keyword is immediately adjacent
+        # (within ~15 chars), not just somewhere nearby in the reference.
+        before_text = text[max(0, year_match.start() - 15):year_match.start()]
+        after_text = text[year_match.end():year_match.end() + 15].strip()
+        if _VENUE_YEAR_PATTERN.search(before_text) or _VENUE_YEAR_PATTERN.search(after_text):
+            continue  # Year is in venue name; skip it
+
         after_year = text[year_match.end():].strip()
         if len(after_year) > 20:
             after_year = re.sub(r'^[.,\s]+', '', after_year)
@@ -306,6 +320,14 @@ def extract_title_from_reference(ref_text: str) -> str:
                     return _clean_title(title_candidate.strip())
 
     # --- 6. Content Heuristic (First sentence that isn't just authors) ---
+    # Also skip segments that look like venue names (e.g. "Proceedings of the 2023...").
+    _VENUE_WORD_RE = re.compile(
+        r'\b(Proceedings|Lecture\s+Notes|Transactions|Symposium|Workshop|'
+        r'Journal)\b',
+        re.IGNORECASE
+    )
+    _SOFT_VENUE_RE = re.compile(r'\bConference\b', re.IGNORECASE)
+    _YEAR_IN_SEGMENT_RE = re.compile(r'\b(?:19|20)\d{2}\b')
     parts = [p.strip() for p in re.split(r'\.\s+', text) if p.strip()]
     for part in parts:
         if len(part) < 20:
@@ -314,6 +336,14 @@ def extract_title_from_reference(ref_text: str) -> str:
             continue
 
         if _is_author_list(part):
+            continue
+
+        # Skip venue-like segments: contains a hard venue keyword, or contains
+        # both a soft venue keyword AND a year (strong signal of a venue name).
+        has_hard_venue = bool(_VENUE_WORD_RE.search(part))
+        has_soft_venue = bool(_SOFT_VENUE_RE.search(part))
+        has_year = bool(_YEAR_IN_SEGMENT_RE.search(part))
+        if has_hard_venue or (has_soft_venue and has_year):
             continue
 
         comma_count = part.count(',')

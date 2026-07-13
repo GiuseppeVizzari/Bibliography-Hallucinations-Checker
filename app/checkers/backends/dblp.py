@@ -31,8 +31,12 @@ DBLP_API = "https://dblp.org/search/publ/api"
 def _extract_authors(info: Dict[str, Any]) -> str:
     """Extract author names from a DBLP info dict."""
     authors_data = info.get("authors", {})
+    if not isinstance(authors_data, dict):
+        return "N/A"
     author_list = authors_data.get("author", [])
-    names = [a.get("text", "") for a in author_list if a.get("text")]
+    if not isinstance(author_list, list):
+        return "N/A"
+    names = [a.get("text", "") for a in author_list if isinstance(a, dict) and a.get("text")]
     if not names:
         return "N/A"
     if len(names) > 3:
@@ -143,6 +147,8 @@ class DBLPBackend(BackendService):
                 break
 
             for hit in hit_list:
+                if not isinstance(hit, dict):
+                    continue
                 info = hit.get("info", {})
                 if not info or not isinstance(info, dict):
                     continue
