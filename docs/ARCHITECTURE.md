@@ -79,36 +79,46 @@ Bibliography Hallucinations Checker/
 
 ### Component Diagram
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│   Browser    │────▶│  Flask App   │────▶│  PDF Processor   │
-│ (AJAX poll)  │◀────│  (Blueprint) │◀────│  (PyMuPDF)       │
-└─────────────┘     └──────────────┘     └──────────────────┘
-                              │
-                              ▼
-                      ┌──────────────┐
-                      │ Orchestrator │
-                      │  (6-step     │
-                      │   pipeline)  │
-                      └──────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
-  ┌──────────┐         ┌──────────┐         ┌──────────┐
-  │ OpenAlex │         │ Crossref │         │ DataCite │
-  └──────────┘         └──────────┘         └──────────┘
-        │                     │                     │
-        ▼                     ▼                     ▼
-  ┌──────────┐         ┌──────────┐         ┌──────────┐
-  │  arXiv   │────────▶│  URL     │────────▶│   Web    │
-  │          │  (DOI)  │ Checker  │  (URL)  │ Fallback │
-  └──────────┘         └──────────┘         └──────────┘
-                              │
-                              ▼
-                        ┌──────────┐
-                        │  DBLP    │
-                        │ (CS)     │
-                        └──────────┘
+```mermaid
+flowchart LR
+    subgraph Client["Client"]
+        B["Browser<br/>(AJAX poll)"]
+    end
+
+    subgraph App["Flask App"]
+        BP["Blueprint"]
+        OR["Orchestrator<br/>(6-step pipeline)"]
+    end
+
+    subgraph PDF["PDF Processor<br/>(PyMuPDF)"]
+        PP["PDF Processor"]
+    end
+
+    subgraph Backends["Verification Backends"]
+        OA["OpenAlex"]
+        CR["Crossref"]
+        DC["DataCite"]
+        AX["arXiv"]
+        UC["URL Checker"]
+        WF["Web Fallback<br/>(DuckDuckGo)"]
+        DB["DBLP<br/>(CS)"]
+    end
+
+    B <--> BP
+    BP --> PP
+    BP --> OR
+    OR --> OA
+    OR --> CR
+    OR --> DC
+    OR --> AX
+    OR --> UC
+    OR --> WF
+    OR --> DB
+
+    style Client fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style App fill:#fff3e0,stroke:#fd7e14,stroke-width:2px
+    style PDF fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    style Backends fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
 ```
 
 ---
