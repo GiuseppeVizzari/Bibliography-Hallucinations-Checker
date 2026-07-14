@@ -2,6 +2,8 @@
 
 A Flask web application that extracts bibliographic references from PDFs and verifies them against multiple open scholarly APIs to detect "hallucinated" (non-existent or mismatched) entries.
 
+📖 **[Technical Documentation](docs/ARCHITECTURE.md)** — Architecture, data flow, backend services, configuration, and deployment details.
+
 ## Quick Start
 
 ### 1. Install the Package
@@ -117,6 +119,8 @@ docker run -p 8000:8000 --env-file .env bibcheck
 
 ## How It Works
 
+> For deep-dive architecture, data flow diagrams, and configuration details, see the [Technical Documentation](docs/ARCHITECTURE.md).
+
 ### Pipeline Overview
 
 ```
@@ -176,6 +180,8 @@ Every successfully matched result is compared against the extracted reference ti
 ## Project Structure
 
 ```
+docs/
+└── ARCHITECTURE.md          # Technical documentation (architecture, data flow, deployment)
 app/
 ├── __init__.py                   # Flask app factory (CSRF protection, SECRET_KEY from env)
 ├── routes.py                     # Upload route + parallel processing (ThreadPoolExecutor)
