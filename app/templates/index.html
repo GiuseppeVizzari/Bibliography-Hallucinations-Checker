@@ -262,11 +262,30 @@
 
         html += '</tbody></table></div>';
 
-        // Back to top button
-        html += '<a href="#" id="back-to-top" title="Back to top" style="display: none; position: fixed; z-index: 1000; width: 2.75rem; height: 2.75rem; right: 2rem; bottom: 2rem; border-radius: 50%; background: #0d6efd; color: #fff; font-size: 1.25rem; text-align: center; line-height: 2.75rem; text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.25); transition: opacity .2s;">↑</a>';
-        html += '<script>';
-        html += '(function () { var btn = document.getElementById(\'back-to-top\'); window.addEventListener(\'scroll\', function () { btn.style.display = window.scrollY > 300 ? \'block\' : \'none\'; }); btn.addEventListener(\'click\', function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: \'smooth\' }); }); })();';
-        html += '<\/script>';
+        // Back to top button (appended to body, outside container)
+        var wrap = document.createElement('div');
+        wrap.id = 'btt-wrap';
+        wrap.style.cssText = 'position:fixed;bottom:2rem;right:2rem;z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s;';
+        var btn = document.createElement('a');
+        btn.href = '#';
+        btn.id = 'btt';
+        btn.title = 'Back to top';
+        btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:2.75rem;height:2.75rem;border-radius:50%;background:#0d6efd;color:#fff;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;font-size:1.25rem;';
+        btn.textContent = '↑';
+        btn.addEventListener('click', function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        wrap.appendChild(btn);
+        document.body.appendChild(wrap);
+
+        // Show/hide button based on scroll position
+        window.addEventListener('scroll', function () {
+            if (window.scrollY > 200) {
+                wrap.style.opacity = '1';
+                wrap.style.pointerEvents = 'auto';
+            } else {
+                wrap.style.opacity = '0';
+                wrap.style.pointerEvents = 'none';
+            }
+        });
 
         resultsContainer.innerHTML = html;
     }
