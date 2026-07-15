@@ -90,8 +90,8 @@ flowchart LR
         OR["Orchestrator<br/>(6-step pipeline)"]
     end
 
-    subgraph PDF["PDF Processor<br/>(PyMuPDF)"]
-        PP["PDF Processor"]
+    subgraph PDF["PDF"]
+        PP["PDF Processor<br/>(PyMuPDF)"]
     end
 
     subgraph Backends["Verification Backends"]
