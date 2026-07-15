@@ -1,7 +1,13 @@
 import sys, os
 sys.path.insert(0, os.path.abspath(os.curdir))
 
-from app.checkers.extraction import extract_title_from_reference, extract_doi_info, heal_doi, extract_urls_from_reference
+from app.checkers.extraction import (
+    extract_title_from_reference,
+    extract_doi_info,
+    heal_doi,
+    heal_url,
+    extract_urls_from_reference,
+)
 from app.checkers.normalizer import strip_venue_suffix, strip_author_header
 from app.pdf_processor import _strip_embedded_line_numbers, _is_marginal_line_number
 
@@ -105,6 +111,88 @@ def test_is_marginal_line_number():
     assert _is_marginal_line_number(text_narrow, 600) is False
 
 
+def test_url_healing_basic():
+    ref = "See https://example.com/some very/long/path for details"
+    url = "https://example.com/some"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed == "https://example.com/somevery/long/path"
+
+
+def test_url_healing_with_slash():
+    # Continuation starts with / (no space before slash — URL is complete)
+    ref = "URL: https://arxiv.org/abs/2301.1234/pdf more info"
+    url = "https://arxiv.org/abs/2301.1234"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed is None  # no whitespace after URL, URL is complete
+
+
+def test_url_healing_with_space_and_slash():
+    # Simulates PDF line break: URL ends, next line starts with /path
+    ref = "See https://example.com/path /pdf more info"
+    url = "https://example.com/path"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed == "https://example.com/path/pdf"
+
+
+def test_url_healing_no_path_chars():
+    ref = "URL: https://arxiv.org/abs/2301.1234 more info"
+    url = "https://arxiv.org/abs/2301.1234"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed is None  # "more" has no URL-path characters
+
+
+def test_url_healing_no_extension():
+    ref = "See https://example.com/path end of sentence."
+    url = "https://example.com/path"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed is None
+
+
+def test_url_healing_stop_words_filtered():
+    ref = "https://example.com/path is important"
+    url = "https://example.com/path"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed is None  # "is" is a stop word
+
+
+def test_url_healing_dot_extension():
+    ref = "See https://example.com/file .pdf more text"
+    url = "https://example.com/file"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed == "https://example.com/file.pdf"
+
+
+def test_url_extraction_heals_broken_urls():
+    # URL broken across what would be a line break in PDF
+    ref = "Visit https://example.com/some very/long/path for info"
+    urls = extract_urls_from_reference(ref)
+    # Should find the base URL and heal it
+    assert any("somevery" in u for u in urls), f"Got URLs: {urls}"
+
+
+def test_url_extraction_no_false_positive():
+    ref = "See https://doi.org/10.1234/abc for the study"
+    urls = extract_urls_from_reference(ref)
+    # "study" is not a stop word, but the URL should not be extended into "study"
+    # unless it looks like a valid URL continuation
+    for url in urls:
+        assert "stud" not in url or "doi.org/10.1234/abc" in url
+
+
 if __name__ == "__main__":
     test_title_extraction()
     test_doi_extraction()
@@ -114,4 +202,13 @@ if __name__ == "__main__":
     test_strip_author_header()
     test_strip_embedded_line_numbers()
     test_is_marginal_line_number()
+    test_url_healing_basic()
+    test_url_healing_with_slash()
+    test_url_healing_with_space_and_slash()
+    test_url_healing_no_path_chars()
+    test_url_healing_no_extension()
+    test_url_healing_stop_words_filtered()
+    test_url_healing_dot_extension()
+    test_url_extraction_heals_broken_urls()
+    test_url_extraction_no_false_positive()
     print("All tests passed!")

@@ -22,6 +22,7 @@ from .extraction import (
     extract_arxiv_id_from_text,
     heal_doi,
     build_original_url,
+    heal_url,
 )
 from .normalizer import calculate_similarity, strip_doi_punctuation
 from .config import WEB_FALLBACK_TRIGGER
@@ -190,6 +191,21 @@ def check_reference(ref_text: str) -> dict:
             else:
                 if urls:
                     result = {"status": "not_found"}
+
+        # --- Step 4b: URL healing (broken URL reconstruction) ---
+        if not result or result["status"] != "found":
+            urls = _get_url_checker().extract_urls(ref_text)
+            for url in urls:
+                cleaned = url.rstrip('.,;:)]')
+                idx = ref_text.find(cleaned)
+                if idx >= 0:
+                    end_pos = idx + len(cleaned)
+                    healed, _ = heal_url(cleaned, end_pos, ref_text)
+                    if healed:
+                        logger.info(f"  → Step 4b URL healed: {url} -> {healed}")
+                        result = _get_url_checker().lookup_by_url(healed, extracted_title)
+                        if result["status"] == "found":
+                            break
 
         # --- Step 5: Title search ---
         if not result or result["status"] != "found":

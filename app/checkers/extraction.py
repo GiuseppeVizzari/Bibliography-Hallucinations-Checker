@@ -453,6 +453,34 @@ def heal_doi(base_doi: str, end_pos: int, ref_text: str):
     return None, 0
 
 
+def heal_url(base_url: str, end_pos: int, ref_text: str) -> tuple:
+    """
+    Attempts to extend a URL that was broken by a space or newline in the source PDF.
+
+    Handles cases like:
+        https://example.com/some very/path  ->  https://example.com/somevery/path
+        https://example.com/some-
+          very/path                         ->  https://example.com/somevery/path
+
+    Only heals when the continuation contains URL-path characters (/ . ~) to
+    avoid false positives like "path end" where "end" is just the next word.
+
+    Strips trailing punctuation (periods, commas, etc.) from the healed URL.
+    Returns (healed_url, new_end_pos) or (None, 0) if no healing was needed.
+    """
+    tail = ref_text[end_pos:]
+    match = re.match(r'^\s+([-._;()/:a-zA-Z0-9]+)', tail)
+    if match:
+        extension = match.group(1).rstrip('.,;)]')
+        if extension.lower() not in {'is', 'a', 'the', 'and', 'for', 'in', 'on', 'with'}:
+            # Require URL-path characters to avoid false positives
+            if '/' in extension or '.' in extension or '~' in extension:
+                healed = base_url + extension
+                logger.debug(f"  [DEBUG] URL healing: {base_url} -> {healed}")
+                return healed, end_pos + match.end()
+    return None, 0
+
+
 def extract_arxiv_id_from_url(url: str) -> Optional[str]:
     """
     Extract the arXiv identifier (e.g. '2301.12345v1') from an arXiv URL.
@@ -516,14 +544,30 @@ def extract_urls_from_reference(ref_text: str) -> list:
     all_urls = _URL_RE.findall(ref_text)
     urls.extend(all_urls)
 
-    # Remove duplicates while preserving order; strip trailing punctuation
-    seen = set()
-    unique_urls = []
+    # --- URL healing: rejoin URLs broken across PDF line breaks ---
+    healed_urls = []
     for url in urls:
         cleaned = url.rstrip('.,;:)]')
-        if cleaned and cleaned not in seen:
-            seen.add(cleaned)
-            unique_urls.append(cleaned)
+        if not cleaned:
+            continue
+        # Find where this URL ends in the original text
+        idx = ref_text.find(cleaned)
+        if idx >= 0:
+            end_pos = idx + len(cleaned)
+            healed, new_end = heal_url(cleaned, end_pos, ref_text)
+            if healed:
+                cleaned = healed.rstrip('.,;:)]')
+                # Update idx to point to the healed URL for dedup check
+                idx = ref_text.find(healed)
+        healed_urls.append(cleaned)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_urls = []
+    for url in healed_urls:
+        if url and url not in seen:
+            seen.add(url)
+            unique_urls.append(url)
 
     return unique_urls
 
