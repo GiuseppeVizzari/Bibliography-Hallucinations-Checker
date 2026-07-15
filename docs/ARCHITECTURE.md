@@ -115,10 +115,10 @@ flowchart LR
     OR --> WF
     OR --> DB
 
-    style Client fill:#f9f9f9,stroke:#333,stroke-width:1px
-    style App fill:#fff3e0,stroke:#fd7e14,stroke-width:2px
-    style PDF fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
-    style Backends fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style Client fill:#1e1e2e,stroke:#999,stroke-width:1px
+    style App fill:#3e2723,stroke:#fd7e14,stroke-width:2px
+    style PDF fill:#1b5e20,stroke:#4caf50,stroke-width:2px
+    style Backends fill:#0d47a1,stroke:#2196f3,stroke-width:2px
 ```
 
 ---
