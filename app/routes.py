@@ -43,10 +43,20 @@ def _cleanup_worker():
             logger.info(f"Cleaned up {len(to_remove)} expired job(s)")
 
 
+# Lock that serialises cleanup-thread startup (separate from _jobs_lock)
+_cleanup_start_lock = threading.Lock()
+
+
 def _ensure_cleanup_thread():
-    """Start the cleanup thread if not already running."""
+    """Start the cleanup thread if not already running.
+
+    Thread-safe: only one cleanup thread is ever started, even if this
+    function is called from multiple request threads simultaneously.
+    """
     global _cleanup_thread
-    if _cleanup_thread is None or not _cleanup_thread.is_alive():
+    with _cleanup_start_lock:
+        if _cleanup_thread is not None and _cleanup_thread.is_alive():
+            return
         _cleanup_stop.clear()
         _cleanup_thread = threading.Thread(target=_cleanup_worker, daemon=True)
         _cleanup_thread.start()

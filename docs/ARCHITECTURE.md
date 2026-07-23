@@ -427,7 +427,8 @@ Upload a PDF for bibliography verification.
 1. Validates file type (PDF) and size (≤ 16MB)
 2. Extracts bibliography via `extract_bibliography()`
 3. Creates job in `_jobs` dict with ThreadPoolExecutor
-4. Returns `job_id` for polling
+4. Starts the background TTL cleanup thread (first use)
+5. Returns `job_id` for polling
 
 **Error responses**:
 - `400`: Invalid file type
@@ -593,9 +594,23 @@ def requested_entity(error):
 
 `SECRET_KEY` is read from environment variable (not hardcoded). Generated via `os.urandom(32)` in `.env.example`.
 
+### TTL Job Cleanup
+
+The `_jobs` dictionary (used for AJAX polling) is bounded by a background cleanup thread (`app/routes.py::_cleanup_worker`). The thread wakes every 60 seconds and removes jobs whose `completed_at` timestamp is older than 5 minutes. The cleanup thread is started lazily on first job creation and is protected against race conditions by `_cleanup_start_lock`. It runs as a daemon thread so it exits cleanly when the process terminates.
+
 ### Request Timeout
 
 All HTTP requests to external APIs use a 15-second timeout to prevent hanging.
+
+### SSRF Protection
+
+All server-side URL fetching passes through `app/checkers/backends/security.py::validate_url_for_fetch()`, which enforces three layers of validation:
+
+1. **Scheme whitelist** — Only `http` and `https` are allowed. Schemes like `file://`, `ftp://`, `gopher://` are rejected.
+2. **Bare IP rejection** — URLs with numeric IP addresses (IPv4 or IPv6) are blocked to force DNS resolution.
+3. **DNS resolution check** — The hostname is resolved via `socket.getaddrinfo()` and every returned IP is checked against a blocklist of private, loopback, link-local, multicast, and reserved ranges (per RFC 1918, RFC 3927, RFC 4291, etc.). Results are cached via `@lru_cache` to avoid repeated lookups.
+
+Meta-refresh redirects are validated against the same rules before the redirect is followed. Blocked URLs produce a `ValueError` that is caught and logged at DEBUG level.
 
 ---
 
@@ -714,6 +729,7 @@ Log levels are configurable via `LOG_LEVEL` environment variable. Key log points
 
 ## Version History
 
+- **v1.8.0**: Added TTL job cleanup (background thread removes completed jobs after 5 min), SSRF protection (IP validation + scheme whitelisting for all URL fetching), underscore URL healing for DOI paths with spaces, and Unicode-aware author detection.
 - **v1.1.4 → v1.7.2**: Major development spanning security hardening, parallel processing, DBLP backend, AJAX polling, DOI healing, title extraction improvements, and Unicode normalization.
 
 See git log for detailed commit history.

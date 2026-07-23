@@ -19,6 +19,7 @@ from ..config import (
     WEB_BOOST_LENGTH_MATCH,
 )
 from .base import BackendService
+from .security import validate_url_for_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ def _verify_page(url: str, target_title: str) -> bool:
     Fetches the page and checks if the title is present in the <h1> or <title> tags.
     """
     try:
+        validate_url_for_fetch(url)
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
             return False
@@ -64,6 +66,7 @@ def _try_direct_url_verification(url: str, target_title: str) -> dict:
     Returns a result dict if successful, otherwise None.
     """
     try:
+        validate_url_for_fetch(url)
         # If it's an arXiv URL or DOI, we can try to fetch and check the title directly
         # This is a simplified check - in practice, you might want to do more sophisticated checks
         response = requests.get(url, timeout=10)

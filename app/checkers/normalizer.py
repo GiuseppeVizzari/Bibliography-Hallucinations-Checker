@@ -156,6 +156,10 @@ def calculate_similarity(text1: str, text2: str) -> float:
     """
     Computes a [0, 1] similarity score between two strings using
     SequenceMatcher on normalized versions of the inputs.
+
+    Normalization strips punctuation (except hyphens) and lowercases.
+    If normalization produces an empty string (e.g. input was all
+    punctuation), falls back to the raw lowercased text.
     """
     if not text1 or not text2:
         return 0.0
@@ -163,6 +167,8 @@ def calculate_similarity(text1: str, text2: str) -> float:
     s1 = normalize_text(text1)
     s2 = normalize_text(text2)
 
+    # normalize_text strips punctuation; if both inputs were punctuation-only
+    # the normalized strings would be empty. Fall back to raw text in that case.
     if not s1 or not s2:
         s1 = text1.lower().strip()
         s2 = text2.lower().strip()

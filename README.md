@@ -233,6 +233,10 @@ app/
 - ✅ **Improved Visibility**: Updated UI colors (orange vs white) for better legibility of similarity scores and status badges.
 - ✅ **CSRF Protection**: Form submissions are protected against cross-site request forgery attacks.
 - ✅ **Secure by Default**: SECRET_KEY sourced from environment variables, debug mode disabled by default.
+- ✅ **SSRF Protection**: All server-side URL fetching validates the target hostname against blocked IP ranges (private, loopback, link-local, cloud metadata) and restricts schemes to `http`/`https`. Meta-refresh redirects are validated before following.
+- ✅ **TTL Job Cleanup**: A background thread automatically removes completed or errored jobs from memory 5 minutes after completion, preventing unbounded memory growth in long-running deployments.
+- ✅ **Underscore URL Healing**: When a DOI URL contains spaces in the repository or file path (e.g. `geometries cat bcn 2024`), the app now replaces filtered stop-words with underscores to reconstruct the original URL (e.g. `geometries_cat_bcn_2024`).
+- ✅ **Unicode Author Detection**: Author-list detection now uses Unicode-aware regex (`[^\W\d_]`) to correctly identify names with diacritics (e.g., "García", "Müller", "Björk") instead of ASCII-only matching.
 - ✅ **No Scholarly API Keys Required**: OpenAlex, Crossref, DataCite, and arXiv are free and open. Optional API keys improve rate limits.
 - ✅ **Web Search Fallback**: For references not found in academic APIs, the app performs a targeted web search and similarity analysis on page titles.
 - ✅ **Intelligent Fallback**: Automatically triggers web search if academic results are found but have low similarity (< 60%), preventing false positives from blocking discovery.
@@ -275,6 +279,14 @@ If you encounter errors like `ModuleNotFoundError: No module named 'ddgs'`, make
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install .
 ```
+
+## Version History
+
+- **v1.8.0** — TTL job cleanup, SSRF protection, underscore URL healing, Unicode author detection
+- **v1.7.x** — DOI healing, DBLP backend, AJAX polling, parallel processing, Unicode normalization
+- **v1.1.4** — Initial release
+
+See git log for detailed commit history.
 
 ## Acknowledgments
 

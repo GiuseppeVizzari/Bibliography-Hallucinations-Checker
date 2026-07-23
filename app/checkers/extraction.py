@@ -50,7 +50,9 @@ def _is_author_list(part: str) -> bool:
         return False
     if ':' in part or 'et al' in part.lower():
         return False
-    words = re.findall(r'\b[A-Za-z]+\b', part)
+    # [^\W\d_] = Unicode letters only (word chars minus digits/underscores).
+    # [A-Za-z] would miss diacritics in names like "García", "Müller", "Björk".
+    words = re.findall(r'\b[^\W\d_]+\b', part)
     if len(words) < 4:
         return False
     common = {w.lower() for w in words if w.lower() in COMMON_TITLE_WORDS}

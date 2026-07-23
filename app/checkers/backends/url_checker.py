@@ -15,6 +15,7 @@ from ..extraction import extract_urls_from_reference
 from ..normalizer import calculate_similarity
 from ..config import RELEVANCE_THRESHOLD, URL_REJECT_FLOOR, URL_KEYWORD_OVERLAP_MIN
 from .base import BackendService
+from .security import validate_url_for_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class URLCheckerBackend(BackendService):
 
     def _fetch_page(self, url: str, headers: dict) -> requests.Response:
         """Fetch a URL, following at most one HTML meta-refresh redirect."""
+        validate_url_for_fetch(url)
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
@@ -83,6 +85,11 @@ class URLCheckerBackend(BackendService):
                 redirect_url = refresh_match.group(1)
                 if not redirect_url.startswith("http"):
                     redirect_url = url.rstrip("/") + "/" + redirect_url.lstrip("./")
+                try:
+                    validate_url_for_fetch(redirect_url)
+                except ValueError:
+                    logger.debug(f"  → Meta-refresh target blocked by SSRF guard: {redirect_url}")
+                    return response  # return original response
                 logger.debug(f"  → Following meta-refresh to: {redirect_url}")
                 response = requests.get(redirect_url, headers=headers, timeout=10)
                 response.raise_for_status()

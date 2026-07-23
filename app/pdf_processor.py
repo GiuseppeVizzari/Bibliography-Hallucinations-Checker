@@ -107,6 +107,9 @@ def extract_bibliography(pdf_path):
 
     # 2. Find "References" or "Bibliography" section
     candidates = []
+    # "rererences" is a deliberate OCR typo catch — PDFs sometimes render
+    # "references" as "rererences" due to the 'f' glyph being misread as 'fe'.
+    # Less relevant for LaTeX-generated PDFs but kept for robustness.
     keywords = ["references", "bibliography", "works cited", "bibliografia", "riferimenti", "rererences"]
 
     for i, block in enumerate(all_blocks):
