@@ -246,4 +246,37 @@ if __name__ == "__main__":
     test_url_extraction_no_false_positive()
     test_url_healing_underscore_spaces()
     test_url_healing_no_false_positive_with_spaces()
+    test_international_characters_preserved()
     print("All tests passed!")
+
+
+def test_international_characters_preserved():
+    """Verify that normalize_ligatures does NOT decompose accented characters.
+
+    The old implementation used unicodedata.normalize('NFKD', text) which
+    decomposed ü → u + combining diaeresis, í → i + combining acute, etc.
+    Since combining marks are not matched by \\w, normalize_text would strip
+    them, corrupting API queries and similarity scores for international names.
+    """
+    from app.checkers.normalizer import normalize_ligatures, normalize_text, calculate_similarity
+
+    # International names must pass through normalize_ligatures unchanged
+    names = ['Dilek Küçük', 'García', 'Müller', 'Björk', 'Naïve', 'Crépe']
+    for name in names:
+        result = normalize_ligatures(name)
+        assert result == name, f"normalize_ligatures changed {name!r} to {result!r}"
+
+    # normalize_text must preserve the characters after ligature pass
+    for name in names:
+        cleaned = normalize_text(name)
+        # After lowercasing, the base letter must still be present
+        for ch in name.lower():
+            assert ch in cleaned or ch.upper() in cleaned.lower(), \
+                f"normalize_text lost character {ch!r} from {name!r}: got {cleaned!r}"
+
+    # Similarity must remain high when comparing same international name
+    sim = calculate_similarity('Küçük García', 'Küçük Garcia')
+    assert sim > 0.9, f"Similarity too low for intl chars: {sim:.4f}"
+
+    sim2 = calculate_similarity('Dilek Küçük', 'Dilek Küçük')
+    assert sim2 == 1.0, f"Identical intl names should have similarity 1.0, got {sim2}"

@@ -200,9 +200,9 @@ Step 1: DOI Lookup
                                             │
                                             └── No URL ──▶ Step 5: Title Search
                                                            │
-                                                           ├── Relevance ≥ 0.35? ──▶ Search backends
+                                                           ├── Relevance ≥ 0.50? ──▶ Search backends
                                                            │
-                                                           └── Relevance < 0.35 ──▶ Step 6: Web Fallback
+                                                           └── Relevance < 0.50 ──▶ Step 6: Web Fallback
                                                                                                     │
                                                                                                     ──▶ DuckDuckGo search
                                                                                                     ──▶ Rank results
@@ -246,11 +246,11 @@ Extracts URLs from reference text and verifies them:
 
 #### Step 5: Title Search
 
-Uses **SequenceMatcher**-based similarity scoring:
+Uses **SequenceMatcher**-based similarity scoring with two key improvements:
 
-1. Normalizes the extracted reference title (decompose ligatures, strip quotes)
-2. Computes similarity against backend search results
-3. **Relevance gate**: Only proceeds if similarity ≥ 0.35
+1. **Normalization**: Applies a ligature-only character map (ﬁ → fi, ﬂ → fl, ﬃ → ffi, etc.) instead of full NFKD decomposition. This preserves accented characters (ü, ö, í, ç, ï, é) in international names and titles, which NFKD would decompose into base character + combining mark, and which `normalize_text()` would then strip.
+2. **Length penalty**: When one title is a substring of another, the score is multiplied by `min_len / max_len`. This prevents short titles like "stance detection a survey" from incorrectly matching longer titles like "deep learning in stance detection a survey" with inflated scores (the wrong paper now scores ~0.44 instead of ~0.75).
+3. **Relevance gate**: Only proceeds if similarity ≥ 0.50 (raised from 0.35)
 4. Queries backends in order: OpenAlex → DBLP → Crossref → DataCite
 
 #### Step 6: Web Fallback
@@ -364,7 +364,7 @@ All thresholds and parameters are in `app/checkers/config.py`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `RELEVANCE_THRESHOLD` | 0.35 | Minimum similarity for title search to proceed |
+| `RELEVANCE_THRESHOLD` | 0.50 | Minimum similarity for title search to proceed |
 | `WEB_FALLBACK_TRIGGER` | 0.60 | Similarity threshold for triggering web fallback |
 | `DBLP_FOUND_THRESHOLD` | 0.80 | DBLP similarity threshold for "found" status |
 | `DBLP_CANDIDATE_THRESHOLD` | 0.60 | DBLP similarity threshold for "candidate" status |
@@ -729,6 +729,7 @@ Log levels are configurable via `LOG_LEVEL` environment variable. Key log points
 
 ## Version History
 
+- **v1.9.0**: International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches to prevent false positives), raises RELEVANCE_THRESHOLD from 0.35 to 0.50.
 - **v1.8.0**: Added TTL job cleanup (background thread removes completed jobs after 5 min), SSRF protection (IP validation + scheme whitelisting for all URL fetching), underscore URL healing for DOI paths with spaces, and Unicode-aware author detection.
 - **v1.1.4 → v1.7.2**: Major development spanning security hardening, parallel processing, DBLP backend, AJAX polling, DOI healing, title extraction improvements, and Unicode normalization.
 

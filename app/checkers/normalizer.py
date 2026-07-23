@@ -4,7 +4,6 @@ app/checkers/normalizer.py
 Text normalization utilities shared across the checker pipeline.
 """
 import re
-import unicodedata
 from difflib import SequenceMatcher
 
 # Re-export thresholds from config for backward compatibility
@@ -16,10 +15,30 @@ from .config import (  # noqa: F401
 
 
 def normalize_ligatures(text: str) -> str:
-    """Decomposes Unicode ligatures like 'ﬁ' into 'fi', 'ﬂ' into 'fl', etc."""
+    """Decomposes Unicode ligatures (ﬁ, ﬂ, ﬁ, ﬃ, ﬄ, etc.) into their ASCII equivalents.
+
+    IMPORTANT: This function deliberately does NOT use unicodedata.normalize('NFKD', text)
+    because NFKD also decomposes accented characters (ü → u + combining diaeresis,
+    í → i + combining acute, etc.), which would then be stripped by normalize_text()
+    and corrupt API queries / similarity scores for international names.
+    """
     if not text:
         return ""
-    return unicodedata.normalize('NFKD', text)
+    # Unicode ligature characters → their decomposed ASCII equivalents
+    LIGATURE_MAP = {
+        '\uFB00': 'ff',    # ﬁ → ff
+        '\uFB01': 'fi',    # ﬂ → fi
+        '\uFB02': 'fI',    # ﬁ → fI (capitalized form — caller should lowercase)
+        '\uFB03': 'ffi',   # ﬃ → ffi
+        '\uFB04': 'ffl',   # ﬄ → ffl
+        '\uFB05': 'st',    # ﬁ → st (long s + t)
+        '\uFB06': 'st',    # ﬂ → st
+        '\u0192': 's',     # ƒ → s (archic f, often treated as ligature)
+    }
+    result = []
+    for ch in text:
+        result.append(LIGATURE_MAP.get(ch, ch))
+    return ''.join(result)
 
 
 def normalize_quotes(text: str) -> str:
@@ -160,6 +179,12 @@ def calculate_similarity(text1: str, text2: str) -> float:
     Normalization strips punctuation (except hyphens) and lowercases.
     If normalization produces an empty string (e.g. input was all
     punctuation), falls back to the raw lowercased text.
+
+    Length penalty: when one title is a substring of the other, the score
+    is multiplied by the length ratio (shorter / longer). This prevents
+    short titles like "stance detection a survey" from getting a high
+    score against longer titles like "deep learning in stance detection
+    a survey" where the shorter is merely a substring.
     """
     if not text1 or not text2:
         return 0.0
@@ -173,4 +198,17 @@ def calculate_similarity(text1: str, text2: str) -> float:
         s1 = text1.lower().strip()
         s2 = text2.lower().strip()
 
-    return SequenceMatcher(None, s1, s2).ratio()
+    raw_sim = SequenceMatcher(None, s1, s2).ratio()
+
+    # Length penalty: penalize when one string is a substring of the other
+    # but the lengths differ significantly.
+    min_len = min(len(s1), len(s2))
+    max_len = max(len(s1), len(s2))
+    if max_len > 0:
+        length_ratio = min_len / max_len
+        # Only apply penalty when the shorter is fully contained in the longer
+        # (i.e., the raw similarity is high enough to suggest containment)
+        if length_ratio < 0.95 and raw_sim > 0.5:
+            return raw_sim * length_ratio
+
+    return raw_sim

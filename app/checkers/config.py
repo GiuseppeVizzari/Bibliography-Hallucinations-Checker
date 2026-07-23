@@ -8,7 +8,7 @@ import time
 
 # --- Similarity thresholds ---
 
-RELEVANCE_THRESHOLD = 0.35       # Pre-acceptance filter for OpenAlex title search
+RELEVANCE_THRESHOLD = 0.50       # Pre-acceptance filter for OpenAlex title search
 WEB_FALLBACK_TRIGGER = 0.60      # OpenAlex → web search fallback gate
 TITLE_SIMILARITY_THRESHOLD = 0.75  # Web search page-verification threshold
 

@@ -227,7 +227,7 @@ app/
 - ✅ **Seven-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, DBLP (CS conference/journal proceedings), web search fallback, and direct URL resource fetching.
 - ✅ **Partial arXiv Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Rate Limiting & Retry**: Automatic exponential backoff for rate-limited APIs (arXiv, DataCite, OpenAlex).
-- ✅ **Relevance Gate**: Title search results with similarity < 0.35 are automatically discarded to avoid false matches.
+- ✅ **Relevance Gate**: Title search results with similarity < 0.50 are automatically discarded to avoid false matches.
 - ✅ **Clickable Links in Results**: Both the original reference column (DOI / arXiv / URL) and the found paper column (title link + source link) provide direct hyperlinks.
 - ✅ **Back-to-Top Button**: A floating button appears while scrolling the results page for quick navigation.
 - ✅ **Improved Visibility**: Updated UI colors (orange vs white) for better legibility of similarity scores and status badges.
@@ -237,6 +237,8 @@ app/
 - ✅ **TTL Job Cleanup**: A background thread automatically removes completed or errored jobs from memory 5 minutes after completion, preventing unbounded memory growth in long-running deployments.
 - ✅ **Underscore URL Healing**: When a DOI URL contains spaces in the repository or file path (e.g. `geometries cat bcn 2024`), the app now replaces filtered stop-words with underscores to reconstruct the original URL (e.g. `geometries_cat_bcn_2024`).
 - ✅ **Unicode Author Detection**: Author-list detection now uses Unicode-aware regex (`[^\W\d_]`) to correctly identify names with diacritics (e.g., "García", "Müller", "Björk") instead of ASCII-only matching.
+- ✅ **International Character Preservation**: The normalization pipeline preserves accented characters (ü, ö, í, ç, ï, é, etc.) in author names and titles. A targeted ligature-only character map replaces the previous NFKD decomposition, which would otherwise corrupt international names during API queries and similarity scoring.
+- ✅ **Length-Aware Similarity Scoring**: When one title is a substring of another, the similarity score is penalized by the length ratio (shorter / longer). This prevents short titles like "stance detection a survey" from incorrectly matching longer titles like "deep learning in stance detection a survey" with inflated scores.
 - ✅ **No Scholarly API Keys Required**: OpenAlex, Crossref, DataCite, and arXiv are free and open. Optional API keys improve rate limits.
 - ✅ **Web Search Fallback**: For references not found in academic APIs, the app performs a targeted web search and similarity analysis on page titles.
 - ✅ **Intelligent Fallback**: Automatically triggers web search if academic results are found but have low similarity (< 60%), preventing false positives from blocking discovery.
@@ -282,6 +284,7 @@ pip install .
 
 ## Version History
 
+- **v1.9.0** — International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches), raises RELEVANCE_THRESHOLD from 0.35 to 0.50
 - **v1.8.0** — TTL job cleanup, SSRF protection, underscore URL healing, Unicode author detection
 - **v1.7.x** — DOI healing, DBLP backend, AJAX polling, parallel processing, Unicode normalization
 - **v1.1.4** — Initial release
