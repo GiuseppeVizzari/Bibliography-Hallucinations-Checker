@@ -193,6 +193,39 @@ def test_url_extraction_no_false_positive():
         assert "stud" not in url or "doi.org/10.1234/abc" in url
 
 
+def test_url_healing_underscore_spaces():
+    """Test that spaced URL-path words are rejoined with underscores.
+
+    PDFs sometimes render repository/file names with spaces where the
+    actual URL uses underscores (e.g. "geometries cat bcn 2024" for
+    "geometries_cat_bcn_2024").
+    """
+    # ds-essay.pdf reference [5] case: GitHub repo name with spaces
+    ref = "Available: https://github.com/ArnauInes/geometries cat bcn 2024"
+    url = "https://github.com/ArnauInes/geometries"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    assert healed == "https://github.com/ArnauInes/geometries_cat_bcn_2024"
+
+    # Extracted URL should also be healed
+    urls = extract_urls_from_reference(ref)
+    assert any(
+        "geometries_cat_bcn_2024" in u for u in urls
+    ), f"Got URLs: {urls}"
+
+
+def test_url_healing_no_false_positive_with_spaces():
+    """Ensure space-replacement doesn't create false URLs from random text."""
+    ref = "See https://example.com/foo the bar for details"
+    url = "https://example.com/foo"
+    idx = ref.find(url)
+    assert idx >= 0
+    healed, end = heal_url(url, idx + len(url), ref)
+    # "the bar" has no digit → should NOT be healed
+    assert healed is None
+
+
 if __name__ == "__main__":
     test_title_extraction()
     test_doi_extraction()
@@ -211,4 +244,6 @@ if __name__ == "__main__":
     test_url_healing_dot_extension()
     test_url_extraction_heals_broken_urls()
     test_url_extraction_no_false_positive()
+    test_url_healing_underscore_spaces()
+    test_url_healing_no_false_positive_with_spaces()
     print("All tests passed!")

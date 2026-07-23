@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Blueprint, render_template, request, current_app, jsonify
@@ -17,9 +18,38 @@ bp = Blueprint('main', __name__)
 ALLOWED_EXTENSIONS = {'pdf'}
 
 # In-memory job tracker for AJAX polling
-# job_id -> {status, total, checked, results, filepath, error}
+# job_id -> {status, total, checked, results, filepath, error, completed_at}
 _jobs = {}
 _jobs_lock = threading.Lock()
+# Cleanup thread control
+_cleanup_stop = threading.Event()
+_cleanup_thread = None
+
+
+def _cleanup_worker():
+    """Background thread: remove jobs completed more than 5 minutes ago."""
+    while not _cleanup_stop.is_set():
+        _cleanup_stop.wait(60)  # run every 60 seconds
+        now = time.time()
+        cutoff = now - 300  # 5 minutes
+        to_remove = []
+        with _jobs_lock:
+            for job_id, job in _jobs.items():
+                if job["status"] in ("complete", "error") and job.get("completed_at", 0) < cutoff:
+                    to_remove.append(job_id)
+            for job_id in to_remove:
+                del _jobs[job_id]
+        if to_remove:
+            logger.info(f"Cleaned up {len(to_remove)} expired job(s)")
+
+
+def _ensure_cleanup_thread():
+    """Start the cleanup thread if not already running."""
+    global _cleanup_thread
+    if _cleanup_thread is None or not _cleanup_thread.is_alive():
+        _cleanup_stop.clear()
+        _cleanup_thread = threading.Thread(target=_cleanup_worker, daemon=True)
+        _cleanup_thread.start()
 
 
 def allowed_file(filename):
@@ -72,6 +102,7 @@ def _process_job(job_id, filepath, refs):
             if job_id in _jobs:
                 _jobs[job_id]["results"] = results
                 _jobs[job_id]["status"] = "complete"
+                _jobs[job_id]["completed_at"] = time.time()
 
     except Exception as e:
         logger.error(f"Error processing job {job_id}: {e}", exc_info=True)
@@ -79,6 +110,7 @@ def _process_job(job_id, filepath, refs):
             if job_id in _jobs:
                 _jobs[job_id]["error"] = str(e)
                 _jobs[job_id]["status"] = "error"
+                _jobs[job_id]["completed_at"] = time.time()
     finally:
         # Clean up uploaded file
         if os.path.exists(filepath):
@@ -144,6 +176,8 @@ def index():
                         "filepath": filepath,
                         "error": None
                     }
+
+                _ensure_cleanup_thread()
 
                 # Launch background worker
                 threading.Thread(

@@ -469,15 +469,52 @@ def heal_url(base_url: str, end_pos: int, ref_text: str) -> tuple:
     Returns (healed_url, new_end_pos) or (None, 0) if no healing was needed.
     """
     tail = ref_text[end_pos:]
+
+    # When the tail contains spaces, the continuation is likely a
+    # multi-word URL path (e.g. "geometries cat bcn 2024" →
+    # "geometries_cat_bcn_2024").  Try underscore replacement first.
+    if ' ' in tail:
+        # Check if the URL was cut mid-word: base ends with alnum AND
+        # tail starts with space + alnum.  This avoids healing cases
+        # like "path end" where "end" is just the next sentence word.
+        base_ends_alnum = base_url[-1].isalnum() if base_url else False
+        tail_has_space_alnum = (len(tail) >= 2 and tail[0] == ' '
+                                and tail[1].isalnum())
+        if base_ends_alnum and tail_has_space_alnum:
+            # Heuristic: require a "URL-like" pattern in the tail to
+            # avoid false positives like "foo the bar" → "foothe_bar".
+            # Pattern: at least two lowercase words AND at least one
+            # digit (common in repo/file names like "cat bcn 2024").
+            tail_words = tail.strip().split()
+            has_lower_words = sum(1 for w in tail_words if w.isalpha() and w.islower())
+            has_digit = any(any(c.isdigit() for c in w) for w in tail_words)
+            if has_lower_words >= 2 and has_digit:
+                # Replace all spaces with underscores; the first space
+                # (between base URL's last word and the tail) becomes
+                # the underscore that joins them.
+                candidate = base_url + tail.replace(' ', '_')
+                if ' ' not in candidate and len(candidate) > len(base_url):
+                    path_part = candidate[len(base_url):]
+                    if (path_part and
+                            not path_part.endswith('_') and
+                            '__' not in path_part and
+                            len(path_part) >= 3 and
+                            all(c.isalnum() or c in '-_./~' for c in path_part)):
+                        healed = candidate
+                        logger.debug(f"  [DEBUG] URL healing (underscore): {base_url} -> {healed}")
+                        new_end = end_pos + len(tail) - len(tail.rstrip())
+                        return healed, new_end
+
+    # Standard single-token healing (existing behavior).
     match = re.match(r'^\s+([-._;()/:a-zA-Z0-9]+)', tail)
     if match:
         extension = match.group(1).rstrip('.,;)]')
         if extension.lower() not in {'is', 'a', 'the', 'and', 'for', 'in', 'on', 'with'}:
-            # Require URL-path characters to avoid false positives
             if '/' in extension or '.' in extension or '~' in extension:
                 healed = base_url + extension
                 logger.debug(f"  [DEBUG] URL healing: {base_url} -> {healed}")
                 return healed, end_pos + match.end()
+
     return None, 0
 
 
