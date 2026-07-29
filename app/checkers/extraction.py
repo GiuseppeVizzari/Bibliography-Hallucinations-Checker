@@ -11,6 +11,35 @@ from .normalizer import normalize_ligatures, normalize_quotes, strip_doi_punctua
 logger = logging.getLogger(__name__)
 
 
+def _strip_doi_trailing(doi: str) -> str:
+    """
+    Strip trailing punctuation from a DOI match.
+
+    DOI paths may legitimately end with a letter (e.g. IEEE's ``10.1109/TRO``),
+    so a trailing dot preceded by a letter is a **path separator**, not
+    punctuation.  Only strip dots when clearly punctuation (preceded by a digit
+    or slash).  Commas and closing brackets are always stripped.
+    """
+    result = doi
+    while result:
+        last = result[-1]
+        if last in ')]':
+            result = result[:-1]
+        elif last == ',':
+            result = result[:-1]
+        elif last == ';':
+            result = result[:-1]
+        elif last == '.':
+            # Keep if preceded by a letter (DOI path separator), strip if
+            # preceded by a digit or slash (trailing punctuation).
+            if len(result) >= 2 and result[-2].isalpha():
+                break  # structural dot — stop stripping
+            result = result[:-1]
+        else:
+            break  # unknown trailing char — stop
+    return result
+
+
 COMMON_TITLE_WORDS = {
     'the', 'a', 'an', 'and', 'for', 'in', 'on', 'with', 'to', 'of', 'at', 'by',
     'from', 'using', 'study', 'survey', 'review', 'analysis', 'framework',
@@ -425,7 +454,7 @@ def extract_doi_info(ref_text: str):
     pattern = r'10\.\d{4,9}/[-._;()/:a-zA-Z0-9]*'
     match = re.search(pattern, ref_text)
     if match:
-        doi = match.group(0).rstrip('.,;)]')
+        doi = _strip_doi_trailing(match.group(0))
         return doi, match.end()
 
     # Fallback: match '10.' followed by whitespace (broken DOI prefix)
@@ -449,6 +478,16 @@ def heal_doi(base_doi: str, end_pos: int, ref_text: str):
     if match:
         extension = match.group(1).rstrip('.,;)]')
         if extension.lower() not in {'is', 'a', 'the', 'and', 'for', 'in', 'on', 'with'}:
+            # Reject pure-digit continuations of 5+ characters — these are
+            # almost certainly page numbers or other numeric artifacts, not
+            # DOI path segments (real DOI paths always contain non-digit
+            # characters like dots, slashes, or letters).
+            if extension.isdigit() and len(extension) >= 5:
+                logger.debug(
+                    f"  [DEBUG] DOI healing skipped (pure-digit continuation): "
+                    f"{base_doi} + {extension}"
+                )
+                return None, 0
             healed = base_doi + extension
             logger.debug(f"  [DEBUG] DOI healing: {base_doi} -> {healed}")
             return healed, end_pos + match.end()

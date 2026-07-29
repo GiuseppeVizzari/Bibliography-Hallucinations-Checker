@@ -163,6 +163,55 @@ def extract_bibliography(pdf_path):
     ]
 
     logger.info(f"Scanning {len(all_blocks) - ref_start_index - 1} blocks after bibliography header...")
+
+    # Track consecutive blocks that look like non-reference content.
+    # When enough blocks in a row lack DOI patterns, author names, and
+    # citation structure, we assume the bibliography has ended — even
+    # if the next section has no explicit "appendix" / "acknowledgments"
+    # header.  This prevents appendix / supplementary content from
+    # leaking into the reference list.
+    non_ref_streak = 0
+    NON_REF_THRESHOLD = 2  # two consecutive non-reference blocks
+    MIN_REF_COUNT = 5    # don't start the non-ref streak until we've seen
+                         # at least this many references (avoids cutting
+                         # short genuinely short bibliographies)
+
+    _DOI_RE = re.compile(r'10\.\d{4,9}/')
+    _AUTHOR_YEAR_RE_BLOCK = re.compile(r'\[[A-Z][^\[\]]*\d{4}[a-z]?\]')
+    _VENUE_YEAR_RE_BLOCK = re.compile(r'\b(?:19|20)\d{2}\b')
+
+    def _looks_like_reference(text: str) -> bool:
+        """Heuristic: does this block resemble a bibliographic reference?"""
+        if not text or len(text.split()) < 5:
+            return False
+        # Must have at least two of: DOI pattern, author-year bracket, year
+        signals = (
+            bool(_DOI_RE.search(text))
+            + bool(_AUTHOR_YEAR_RE_BLOCK.search(text))
+            + bool(_VENUE_YEAR_RE_BLOCK.search(text))
+        )
+        return signals >= 2
+
+    def _looks_like_title(text: str) -> bool:
+        """Heuristic: does this block look like a section title / header?
+
+        Section titles in PDFs often appear as short blocks with an unusual
+        proportion of uppercase characters (e.g. "A The Simulator", "B
+        Tunable Parameter Catalogue").  This is a soft signal used to stop
+        the bibliography scan early, before appendix content leaks in.
+        """
+        if not text or len(text.split()) > 15:
+            return False
+        stripped = re.sub(r'[^A-Za-z]', '', text)
+        if not stripped:
+            return False
+        upper_ratio = sum(1 for c in stripped if c.isupper()) / len(stripped)
+        # High uppercase ratio is unusual for normal prose but common for
+        # short section titles (e.g. "A The Simulator" → 6/13 ≈ 46%).
+        if upper_ratio > 0.40:
+            return True
+        return False
+
     for i in range(ref_start_index + 1, len(all_blocks)):
         block_text = all_blocks[i][4].strip()
         lower_text = block_text.lower()
@@ -197,6 +246,27 @@ def extract_bibliography(pdf_path):
         if _is_numeric_table_row(block_text):
             logger.debug(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
             continue
+
+        # Stop early if this block looks like a section title / header.
+        # Titles often have an unusual uppercase ratio and are short.
+        if _looks_like_title(block_text):
+            logger.debug(
+                f"  [DEBUG] STOP (title-like block): '{first_line}'"
+            )
+            break
+
+        if _looks_like_reference(block_text):
+            non_ref_streak = 0
+        elif len(ref_content) >= MIN_REF_COUNT:
+            # Only start counting non-ref streak after we've collected
+            # enough references to be confident we're past the bibliography.
+            non_ref_streak += 1
+            if non_ref_streak >= NON_REF_THRESHOLD:
+                logger.debug(
+                    f"  [DEBUG] STOP (non-reference streak={non_ref_streak}): "
+                    f"'{first_line}'"
+                )
+                break
 
         logger.debug(f"  [DEBUG]   INCLUDE block {i} ({len(lower_text.split())} words): '{first_line}'")
         ref_content.append(block_text)
