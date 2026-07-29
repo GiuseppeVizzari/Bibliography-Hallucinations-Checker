@@ -729,6 +729,7 @@ Log levels are configurable via `LOG_LEVEL` environment variable. Key log points
 
 ## Version History
 
+- **v1.9.1**: Fixed title extraction for single-line PDF references: smart period-split avoids false boundaries at author→title and venue bleed points, expanded `COMMON_TITLE_WORDS` with domain-specific terms, tightened venue detection to only flag parts that *start with* "In [Venue]" or known publisher names, added `strip_venue_suffix` support for "In Proceedings" without colon, added standalone first-word surname stripping in `strip_author_header`.
 - **v1.9.0**: International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches to prevent false positives), raises RELEVANCE_THRESHOLD from 0.35 to 0.50.
 - **v1.8.0**: Added TTL job cleanup (background thread removes completed jobs after 5 min), SSRF protection (IP validation + scheme whitelisting for all URL fetching), underscore URL healing for DOI paths with spaces, and Unicode-aware author detection.
 - **v1.1.4 → v1.7.2**: Major development spanning security hardening, parallel processing, DBLP backend, AJAX polling, DOI healing, title extraction improvements, and Unicode normalization.

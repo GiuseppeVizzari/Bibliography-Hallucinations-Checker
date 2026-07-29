@@ -92,8 +92,25 @@ def heal_hyphens(text: str) -> str:
 def strip_venue_suffix(title: str) -> str:
     """
     Removes trailing venue/proceedings information from a title.
+    Handles both "In: Proceedings..." and "In Proceedings..." (without colon).
     """
+    # Original: "In:" pattern
     cleaned = re.sub(r'\s+[Ii]n:\s+.*$', '', title, flags=re.DOTALL)
+    # New: "In [Capitalized Word]" patterns (e.g. "In Proceedings", "In IEEE", "In ACM")
+    # Only strip when "In" is followed by a capitalized word that looks like a venue
+    _VENUE_START_RE = re.compile(
+        r'\s+[Ii]n\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)(?:,|\s|$)',
+        re.DOTALL
+    )
+    m = _VENUE_START_RE.search(cleaned)
+    if m:
+        # Check if this looks like a venue (has venue-related keywords)
+        venue_text = m.group(1).lower()
+        venue_keywords = {'proceeding', 'ieee', 'acm', 'springer', 'lecture',
+                         'symposium', 'conference', 'workshop', 'journal',
+                         'transactions', 'communications'}
+        if any(kw in venue_text for kw in venue_keywords):
+            cleaned = cleaned[:m.start()]
     cleaned = re.sub(r'^[\s:;]+', '', cleaned)
     return cleaned.rstrip('.,; ') or title
 
@@ -154,6 +171,27 @@ def strip_author_header(text: str, common_title_words: set) -> str:
                     text = tail
                     continue
         break
+
+    # --- Standalone first-word surname (no comma/colon after it) ---
+    # Handles cases like "Zavlanos\nMultirobot Data Gathering..." where a
+    # surname appears at the start followed by a newline and the title.
+    # Key signal: the first word is followed by a newline (not a space),
+    # indicating it's a standalone surname that bled from the previous
+    # period-split (e.g. "Michael M. Zavlanos\nMultirobot..." → Part =
+    # "Zavlanos\nMultirobot...").
+    # Guard: don't strip common title-starting words (articles, prepositions).
+    _TITLE_START_GUARD = {'in', 'on', 'at', 'by', 'for', 'of', 'to', 'and',
+                           'or', 'a', 'an', 'the', 'as', 'is', 'with'}
+    if '\n' in text:
+        first_word = text.split()[0] if text.split() else ''
+        first_end = len(first_word)
+        if (first_end < len(text) and text[first_end] == '\n'
+                and 2 <= len(first_word) <= 15
+                and first_word[0].isupper()
+                and first_word.lower() not in _TITLE_START_GUARD):
+            tail = ' '.join(text.split()[1:]) if len(text.split()) > 1 else ''
+            if len(tail) > 10:
+                text = tail
 
     return text
 

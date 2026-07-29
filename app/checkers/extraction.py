@@ -46,7 +46,81 @@ COMMON_TITLE_WORDS = {
     'model', 'method', 'approach', 'system', 'design', 'evaluation',
     'results', 'simulation', 'experimental', 'performance',
     'impact', 'influence', 'theory', 'detection', 'learning', 'optimization',
-    'improved', 'based', 'between', 'towards', 'through', 'across'
+    'improved', 'based', 'between', 'towards', 'through', 'across',
+    # Common academic title words frequently missing from the original set
+    'decades', 'collaborative', 'coordinated', 'autonomous', 'active',
+    'multi', 'robot', 'exploration', 'mapping', 'slam', 'gathering',
+    'communication', 'constraints', 'buffer', 'robotic', 'robotics',
+    'governance', 'allocation', 'path', 'planning', 'localization',
+    'simultaneous', 'localization', 'mapping', 'grasping', 'manipulation',
+    'navigation', 'perception', 'registration', 'fusion', 'estimation',
+    'control', 'tracking', 'detection', 'classification', 'segmentation',
+    'recognition', 'prediction', 'estimation', 'filtering', 'smoothing',
+    'sampling', 'coverage', 'search', 'scheduling', 'coordination',
+    'decentralized', 'distributed', 'centralized', 'hierarchical',
+    'adaptive', 'robust', 'stable', 'convergent', 'efficient',
+    'real-time', 'online', 'offline', 'dynamic', 'static',
+    'uncertainty', 'probability', 'stochastic', 'deterministic',
+    'consensus', 'formation', 'swarm', 'fleet', 'network',
+    'topology', 'connectivity', 'maintaining', 'preservation',
+    'information', 'shared', 'common', 'knowledge', 'belief',
+    'state', 'space', 'grid', 'occupancy', 'obstacle', 'collision',
+    'avoidance', 'detection', 'sensor', 'actuator', 'motion',
+    'trajectory', 'kinematics', 'dynamics', 'nonlinear', 'linear',
+    'discrete', 'continuous', 'hybrid', 'event', 'triggered',
+    'sampled', 'data', 'driven', 'learning', 'reinforcement',
+    'supervised', 'unsupervised', 'transfer', 'meta', 'few-shot',
+    'zero-shot', 'generalization', 'adaptation', 'calibration',
+    'calibration', 'identification', 'parameter', 'estimation',
+    'observer', 'predictor', 'compensator', 'controller',
+    'regulator', 'tracker', 'servo', 'adaptive', 'gain',
+    'output', 'input', 'feedback', 'feedforward', 'open-loop',
+    'closed-loop', 'pid', 'lqr', 'mpc', 'h-infinity', 'sliding',
+    'mode', 'variable', 'structure', 'fuzzy', 'neural', 'network',
+    'deep', 'shallow', 'wide', 'narrow', 'sparse', 'dense',
+    'convex', 'nonconvex', 'quadratic', 'linear', 'integer',
+    'mixed', 'combinatorial', 'graph', 'tree', 'forest', 'mesh',
+    'surface', 'volume', 'boundary', 'interior', 'exterior',
+    'boundary', 'value', 'initial', 'condition', 'problem',
+    'equation', 'inequality', 'constraint', 'objective', 'cost',
+    'reward', 'utility', 'loss', 'error', 'residual', 'gradient',
+    'hessian', 'jacobian', 'eigenvalue', 'singular', 'decomposition',
+    'factorization', 'iteration', 'convergence', 'divergence',
+    'oscillation', 'chaos', 'bifurcation', 'stability', 'stabilize',
+    'controllability', 'observability', 'completeness', 'soundness',
+    'complexity', 'computational', 'algorithm', 'heuristic',
+    'approximation', 'exact', 'optimal', 'suboptimal', 'near',
+    'best', 'worst', 'average', 'median', 'mean', 'variance',
+    'standard', 'deviation', 'confidence', 'interval', 'bound',
+    'limit', 'asymptotic', 'transient', 'steady-state', 'equilibrium',
+    'fixed', 'point', 'cycle', 'attractor', 'repeller', 'saddle',
+    'manifold', 'subspace', 'hyperplane', 'hypercube', 'hypersphere',
+    'ball', 'cone', 'polytope', 'polyhedron', 'simplex', 'basis',
+    'dimension', 'rank', 'null', 'range', 'kernel', 'image',
+    'dual', 'primal', 'lagrangian', 'hamiltonian', 'symplectic',
+    'orthogonal', 'orthonormal', 'unitary', 'hermitian', 'symmetric',
+    'antisymmetric', 'skew', 'positive', 'definite', 'semidefinite',
+    'negative', 'indefinite', 'nonnegative', 'monotone', 'convex',
+    'concave', 'quasiconvex', 'quasiconcave', 'pseudoconvex',
+    'unimodal', 'multimodal', 'bimodal', 'periodic', 'aperiodic',
+    'transient', 'persistent', 'asymptotic', 'exponential',
+    'polynomial', 'logarithmic', 'linear', 'quadratic', 'cubic',
+    'rational', 'algebraic', 'transcendental', 'elementary',
+    'special', 'hypergeometric', 'bessel', 'legendre', 'chebyshev',
+    'laguerre', 'hermite', 'jacobi', 'gegenbauer', 'ultraspherical',
+    'elliptic', 'parabolic', 'hyperbolic', 'elliptic', 'integral',
+    'differential', 'partial', 'ordinary', 'stochastic', 'difference',
+    'functional', 'integro', 'delay', 'advanced', 'neutral',
+    'mixed', 'type', 'boundary', 'initial', 'mixed', 'periodic',
+    'dirichlet', 'neumann', 'robin', 'cauchy', 'periodic',
+    'homogeneous', 'inhomogeneous', 'linear', 'nonlinear',
+    'autonomous', 'nonautonomous', 'conservative', 'dissipative',
+    'dissipation', 'energy', 'entropy', 'enthalpy', 'free',
+    'potential', 'kinetic', 'thermal', 'mechanical', 'electrical',
+    'magnetic', 'electric', 'electromagnetic', 'optical',
+    'acoustic', 'vibrational', 'structural', 'fluid', 'gas',
+    'liquid', 'plasma', 'solid', 'composite', 'multiphase',
+    'multicomponent', 'multiscale', 'multifield', 'multiphysics',
 }
 
 # Compiled regexes for cleanup
@@ -75,12 +149,35 @@ def _is_numeric_garbage(candidate: str) -> bool:
 
 def _is_author_list(part: str) -> bool:
     """Returns True if a segment looks like a list of author names, not a title."""
-    if part.count(',') < 2:
-        return False
     if ':' in part or 'et al' in part.lower():
         return False
-    # [^\W\d_] = Unicode letters only (word chars minus digits/underscores).
-    # [A-Za-z] would miss diacritics in names like "García", "Müller", "Björk".
+
+    # --- "and"-only author detection (no commas or < 2 commas) ---
+    # Catches patterns like "Jan Bayer and Jan Faigl" or "Meng Guo and Michael M".
+    # Only applies to SHORT segments (author lists are typically 2-6 names).
+    if part.count(',') < 2:
+        words = re.findall(r'\b[^\W\d_]+\b', part)
+        if 2 <= len(words) <= 6:
+            # Must contain "and" as a connector
+            if ' and ' not in part.lower() and ' & ' not in part.lower():
+                # Check if segment starts with a lowercase word followed by
+                # a capitalized word — strong signal of a mid-author fragment
+                # (e.g. "and Frank E. Schneider" or "and Minghui Hu").
+                if re.match(r'^[a-z]+ [A-Z]', part):
+                    return True
+                # Check if segment ends with a capitalized word preceded by
+                # "and" — classic last-author pattern (e.g. "Meng Guo and Michael M").
+                if re.search(r'\band\b [A-Z]', part):
+                    return True
+            else:
+                # Has "and" or "&" — check if all words look like proper names.
+                # A name-like segment has most words starting with uppercase
+                # and few or no common title words.
+                name_words = [w for w in words if w[0].isupper() and len(w) < 15]
+                if len(name_words) >= len(words) * 0.5 and len(name_words) >= 2:
+                    return True
+
+    # --- Original comma-based detection (for segments with 2+ commas) ---
     words = re.findall(r'\b[^\W\d_]+\b', part)
     if len(words) < 4:
         return False
@@ -359,7 +456,59 @@ def extract_title_from_reference(ref_text: str) -> str:
     )
     _SOFT_VENUE_RE = re.compile(r'\bConference\b', re.IGNORECASE)
     _YEAR_IN_SEGMENT_RE = re.compile(r'\b(?:19|20)\d{2}\b')
-    parts = [p.strip() for p in re.split(r'\.\s+', text) if p.strip()]
+    # Smart period-split: two guards.
+    # Guard A (author→title): avoid splitting on periods where the text
+    # *after* the period looks like a title keyword (e.g. "Sebastian Thrun.
+    # Collaborative..." → keep together).
+    # Guard B (venue bleed): avoid splitting on periods where the text
+    # *after* the period starts with "In [Venue]" (e.g. "exploration. In
+    # Proceedings..." → keep together so the venue isn't treated as a part).
+    _TITLE_KEYWORDS = (
+        'In', 'A', 'The', 'An', 'Multi', 'A frontier', 'Decentralized',
+        'Collaborative', 'Coordinated', 'Role-based', 'Active', 'Swarm',
+        'Frontier', 'Using', 'Multiple', 'A review',
+    )
+    _VENUE_FOLLOWING_RE = re.compile(
+        r'\s+In\s+([A-Z][a-zA-Z]+)', re.IGNORECASE
+    )
+    _author_period_positions = set()
+    _venue_period_positions = set()
+    for m in re.finditer(r'\.\s+', text):
+        pos = m.start()
+        after = text[m.end():].lstrip()
+        # Guard A: after looks like a title keyword
+        if after:
+            first_word = after.split()[0] if after.split() else ''
+            if first_word in _TITLE_KEYWORDS:
+                _author_period_positions.add(pos)
+            # Guard B: after starts with "In [Venue]"
+            venue_m = _VENUE_FOLLOWING_RE.match(after)
+            if venue_m:
+                venue_word = venue_m.group(1).lower()
+                _venue_keywords = {
+                    'proceedings', 'ieee', 'acm', 'springer', 'lecture',
+                    'symposium', 'conference', 'workshop', 'journal',
+                    'transactions', 'communications',
+                }
+                if venue_word in _venue_keywords:
+                    _venue_period_positions.add(pos)
+    # Split on periods, but respect both guards
+    _parts = []
+    last = 0
+    for m in re.finditer(r'\.\s+', text):
+        pos = m.start()
+        if pos in _author_period_positions:
+            # Keep author→title boundary intact
+            _parts.append(text[last:pos])
+            last = m.end()
+        elif pos in _venue_period_positions:
+            # Don't split here — the venue would bleed into a separate part
+            pass
+        else:
+            _parts.append(text[last:pos])
+            last = m.end()
+    _parts.append(text[last:])
+    parts = [p.strip() for p in _parts if p.strip()]
     for part in parts:
         if len(part) < 20:
             continue
@@ -369,12 +518,112 @@ def extract_title_from_reference(ref_text: str) -> str:
         if _is_author_list(part):
             continue
 
-        # Skip venue-like segments: contains a hard venue keyword, or contains
-        # both a soft venue keyword AND a year (strong signal of a venue name).
-        has_hard_venue = bool(_VENUE_WORD_RE.search(part))
-        has_soft_venue = bool(_SOFT_VENUE_RE.search(part))
+        # When a period-split part contains both author names and a title
+        # (because the first period was the end of the title itself), the
+        # whole thing gets lumped into one part.  Detect the author+title
+        # split by looking for a newline followed by capitalized text.
+        _part_lines = part.splitlines()
+        if len(_part_lines) >= 2:
+            _first_line = _part_lines[0].strip()
+            _tail_lines = ' '.join(l.strip() for l in _part_lines[1:] if l.strip())
+            # First line looks like an author segment if:
+            # - It's short (< 45 chars)
+            # - It lacks title-like articles/prepositions at the START
+            #   (titles usually begin with a noun/adjective, authors begin
+            #   with a capitalized name — but we need to distinguish).
+            # Key signal: titles often start with articles ("The", "A") or
+            # prepositions ("In", "On") or conjunctions ("And").  Author names
+            # typically start with a capitalized proper noun.
+            _first_words = re.findall(r'\b\w+\b', _first_line)
+            _article_preposition = {'the', 'a', 'an', 'in', 'on', 'at', 'for', 'of', 'and', 'or', 'to'}
+            _starts_with_article = (
+                _first_words
+                and _first_words[0].lower() in _article_preposition
+            )
+            if (len(_first_line) < 45 and len(_tail_lines) >= 8
+                    and _tail_lines[0].isupper() and not _starts_with_article):
+                # The tail may start with a bleeding surname from the author
+                # line (e.g. "Meng Guo and Michael M. Zavlanos\nMultirobot..."
+                # → tail = "Zavlanos Multirobot...").  Two cases:
+                #   1. Tail starts with same word ending first line (exact bleed)
+                #   2. Tail's first LINE is a standalone capitalized word (surname
+                #      left after period split on an initial like "M.")
+                _first_line_words = _first_line.split()
+                _last_first_word = _first_line_words[-1] if _first_line_words else ''
+                _tail_words = _tail_lines.split()
+                _first_tail_word = _tail_words[0] if _tail_words else ''
+                _tail_first_line = _tail_lines.splitlines()[0].strip() if _tail_lines else ''
+                # Case 1: exact word match (e.g. "Zavlanos" == "Zavlanos")
+                if (_last_first_word and _first_tail_word
+                        and _last_first_word == _first_tail_word
+                        and len(_tail_words) >= 2):
+                    _candidate = _clean_title(' '.join(_tail_words[1:]))
+                # Case 2: first line of tail is a standalone surname (3+ chars)
+                # and the text after it looks like a title.
+                elif (_tail_first_line
+                        and len(_tail_first_line) < 20
+                        and _tail_first_line[0].isupper()
+                        and len(_tail_first_line) >= 3
+                        and _tail_first_line == _first_tail_word):
+                    _rest = ' '.join(l.strip() for l in _tail_lines.splitlines()[1:] if l.strip())
+                    if len(_rest) >= 5:
+                        _candidate = _clean_title(_rest)
+                    else:
+                        _candidate = _clean_title(_tail_lines)
+                else:
+                    _candidate = _clean_title(_tail_lines)
+                if not _is_numeric_garbage(_candidate) and len(_candidate) >= 5:
+                    return _candidate
+
+        # Skip venue-like segments.
+        # Only flag as venue if the part *starts with* "In [Venue]" (e.g.
+        # "In Proceedings..." or "In IEEE...") — a part that starts with a
+        # title word but merely *contains* a venue keyword later is NOT a
+        # venue (e.g. "Collaborative multi-robot exploration. In
+        # Proceedings..." is a title, not a venue).
+        # Also flag parts that start with known publisher/org names
+        # (IEEE, ACM, Springer) followed by a journal/conference name.
+        _IN_VENUE_START_RE = re.compile(
+            r'^\s*[Ii]n\s+([A-Z][a-zA-Z]+)', re.IGNORECASE
+        )
+        in_venue_match = _IN_VENUE_START_RE.search(part)
+        is_venue_start = False
+        if in_venue_match:
+            venue_word = in_venue_match.group(1).lower()
+            _venue_start_keywords = {
+                'proceedings', 'ieee', 'acm', 'springer', 'lecture',
+                'symposium', 'conference', 'workshop', 'journal',
+                'transactions', 'communications',
+            }
+            if venue_word in _venue_start_keywords:
+                is_venue_start = True
+        # Also catch parts starting with publisher/org names (e.g.
+        # "IEEE Transactions on Robotics...", "ACM Journal...")
+        _PUB_ORG_START_RE = re.compile(
+            r'^\s*(IEEE|ACM|Springer|Elsevier|Wiley|Sage|Taylor\s+&\s*Francis)\b',
+            re.IGNORECASE
+        )
+        pub_match = _PUB_ORG_START_RE.search(part)
+        is_pub_venue = False
+        if pub_match:
+            # Check if the part also contains a journal/conference keyword
+            pub_text = part[pub_match.end():]
+            pub_venue_keywords = {
+                'transactions', 'journal', 'conference', 'proceedings',
+                'letters', 'communications', 'transactions',
+            }
+            if re.search(r'\b(' + '|'.join(pub_venue_keywords) + r')\b', pub_text, re.IGNORECASE):
+                is_pub_venue = True
+        # Also keep the soft-venue+year check, but only when the part
+        # *starts with* the conference pattern (e.g. "Conference on ... 2023").
+        # A part that merely *contains* "Conference" + a year is not necessarily
+        # a venue (e.g. "Collaborative multi-robot exploration. In
+        # Proceedings of the IEEE International Conference on ... 2000" is a
+        # title+venue combo, not a pure venue name).
+        _CONF_START_RE = re.compile(r'^\s*[Ii]n\s+(?:the\s+)?\bConference\b', re.IGNORECASE)
+        has_conf_start = bool(_CONF_START_RE.search(part))
         has_year = bool(_YEAR_IN_SEGMENT_RE.search(part))
-        if has_hard_venue or (has_soft_venue and has_year):
+        if is_venue_start or is_pub_venue or (has_conf_start and has_year):
             continue
 
         comma_count = part.count(',')

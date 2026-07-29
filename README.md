@@ -284,6 +284,7 @@ pip install .
 
 ## Version History
 
+- **v1.9.1** — Fixed title extraction for single-line PDF references: smart period-split avoids false boundaries at author→title and venue bleed points, expanded `COMMON_TITLE_WORDS` with domain-specific terms, tightened venue detection to only flag parts that *start with* "In [Venue]" or known publisher names, added `strip_venue_suffix` support for "In Proceedings" without colon, added standalone first-word surname stripping in `strip_author_header`.
 - **v1.9.0** — International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches), raises RELEVANCE_THRESHOLD from 0.35 to 0.50
 - **v1.8.0** — TTL job cleanup, SSRF protection, underscore URL healing, Unicode author detection
 - **v1.7.x** — DOI healing, DBLP backend, AJAX polling, parallel processing, Unicode normalization
