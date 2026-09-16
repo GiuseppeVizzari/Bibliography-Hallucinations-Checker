@@ -49,6 +49,21 @@ def _is_numeric_table_row(text: str) -> bool:
     return (numeric_count / len(tokens)) > 0.60
 
 
+def _is_citation_bracket(text: str) -> bool:
+    """Returns True if the block is just a citation bracket like [1], [2], etc."""
+    return bool(re.match(r'^\s*\[\s*\d+\s*\]\s*$', text))
+
+
+def _starts_with_citation_bracket(text: str) -> bool:
+    """Returns True if the block starts with a citation bracket like [1] or [16]."""
+    return bool(re.match(r'^\s*\[\s*\d+\s*\]\s+', text))
+
+
+def _is_page_number_artifact(text: str, block_width: float) -> bool:
+    """Returns True if the block is a standalone page number (not reference content)."""
+    return block_width < 30 and re.match(r'^\d{1,3}$', text.strip())
+
+
 def extract_bibliography(pdf_path):
     """
     Extracts bibliography references from a PDF.
@@ -126,21 +141,31 @@ def extract_bibliography(pdf_path):
         text_to_check = first_line if len(text.split()) >= 10 else text
 
         if len(text_to_check.split()) < 10:
+            matched_keyword = None
             if any(k in text_to_check for k in keywords):
                 clean_text = re.sub(r'[^a-z]', '', text_to_check)
-                if any(k in clean_text for k in keywords):
-                    page_num = block[7]
+                for k in keywords:
+                    if k in clean_text:
+                        matched_keyword = k
+                        break
+                if matched_keyword:
+                    # Verify it's actually a header, not just an inline mention.
+                    # A real header's text is essentially the keyword itself
+                    # (allowing minor surrounding punctuation/whitespace).
+                    no_keyword = re.sub(matched_keyword, '', clean_text).strip()
+                    if len(no_keyword) <= 5:
+                        page_num = block[7]
 
-                    # Strip line numbers before ToC check to avoid false positives
-                    text_no_ln = _strip_embedded_line_numbers(text_to_check)
-                    is_toc = False
-                    if re.search(r'\d+$', text_no_ln) or '..' in text_no_ln or '. .' in text_no_ln:
-                        is_toc = True
-                    if total_pages >= 4 and page_num < total_pages * 0.25:
-                        is_toc = True
+                        # Strip line numbers before ToC check to avoid false positives
+                        text_no_ln = _strip_embedded_line_numbers(text_to_check)
+                        is_toc = False
+                        if re.search(r'\d+$', text_no_ln) or '..' in text_no_ln or '. .' in text_no_ln:
+                            is_toc = True
+                        if total_pages >= 4 and page_num < total_pages * 0.25:
+                            is_toc = True
 
-                    if not is_toc:
-                        candidates.append(i)
+                        if not is_toc:
+                            candidates.append(i)
 
     ref_start_index = candidates[0] if candidates else -1
     if ref_start_index != -1:
@@ -247,6 +272,29 @@ def extract_bibliography(pdf_path):
             logger.debug(f"  [DEBUG]   SKIP (numeric table row): '{first_line}'")
             continue
 
+        # Skip structural artifacts (page numbers) from the non-reference
+        # streak.  Page numbers are layout artifacts, not content.
+        block_width = all_blocks[i][2] - all_blocks[i][0]
+        if _is_page_number_artifact(block_text, block_width):
+            logger.debug(f"  [DEBUG]   SKIP (structural artifact): '{first_line}'")
+            non_ref_streak = 0  # reset — not real content
+            continue
+
+        # If a block is just a citation bracket like [2], include it in
+        # ref_content (so its content on the next block can be merged) but
+        # reset the streak since it's not real reference content.
+        if _is_citation_bracket(block_text):
+            logger.debug(f"  [DEBUG]   INCLUDE (citation bracket): '{first_line}'")
+            non_ref_streak = 0
+            ref_content.append(block_text)
+            continue
+
+        # If a block starts with a citation bracket like [7], it's likely the
+        # start of a new reference (even if it lacks a year on this line).
+        # Reset the streak so we don't prematurely stop.
+        if _starts_with_citation_bracket(block_text):
+            non_ref_streak = 0
+
         # Stop early if this block looks like a section title / header.
         # Titles often have an unusual uppercase ratio and are short.
         if _looks_like_title(block_text):
@@ -275,33 +323,38 @@ def extract_bibliography(pdf_path):
 
     # P2: Multi-page fallback — detect page gaps in consecutive blocks and merge
     # across the gap. This handles references that span page boundaries.
+    # Also merge same-page blocks where a bracket-only block (e.g. "[2]")
+    # immediately precedes its content — some PDFs lay out references this way.
     merged_content = []
     i = 0
     while i < len(ref_content):
         block_idx = ref_start_index + 1 + i
         page_curr = all_blocks[block_idx][7] if block_idx < len(all_blocks) else -1
+        merged = ref_content[i]
+        j = i + 1
 
-        if i + 1 < len(ref_content):
-            block_idx_next = ref_start_index + 1 + (i + 1)
-            page_next = all_blocks[block_idx_next][7] if block_idx_next < len(all_blocks) else -1
-            page_gap = page_next - page_curr
+        # Same-page merge: only merge when current block is bracket-only
+        # (e.g. "[2]" alone). Don't merge full references across same-page
+        # blocks — that would swallow content from multiple references.
+        if _is_citation_bracket(ref_content[i]):
+            while j < len(ref_content):
+                block_idx_j = ref_start_index + 1 + j
+                page_j = all_blocks[block_idx_j][7] if block_idx_j < len(all_blocks) else -1
+                next_text = ref_content[j]
 
-            if page_gap > 1:
-                merged = ref_content[i]
-                j = i + 1
-                while j < len(ref_content):
-                    block_idx_j = ref_start_index + 1 + j
-                    page_j = all_blocks[block_idx_j][7] if block_idx_j < len(all_blocks) else -1
-                    if page_j == page_curr + 1:
-                        break
-                    merged += "\n" + ref_content[j]
-                    j += 1
-                merged_content.append(merged)
-                i = j
-                continue
+                # Stop if next block starts a new reference
+                if _starts_with_citation_bracket(next_text):
+                    break
 
-        merged_content.append(ref_content[i])
-        i += 1
+                # Stop if next block is on a different page
+                if page_j != page_curr:
+                    break
+
+                merged += "\n" + next_text
+                j += 1
+
+        merged_content.append(merged)
+        i = j
 
     ref_content = merged_content
     logger.info(f"After multi-page merge: {len(ref_content)} blocks")

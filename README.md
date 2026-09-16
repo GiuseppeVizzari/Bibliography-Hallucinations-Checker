@@ -224,6 +224,8 @@ app/
 - ✅ **Hyphenated Word Rejoining**: Words broken across PDF lines with hyphens are rejoined, including uppercase continuations (e.g. `Multi-\nTarget` → `MultiTarget`) for title-case words common in reference titles.
 - ✅ **DOI Healing**: Automatically fixes broken DOIs caused by PDF line-wrapping or spaces. Trailing punctuation (`.`, `,`, `;`, `)`, `]`) is stripped from extracted DOIs to prevent false mismatches.
 - ✅ **Multi-Page Reference Merging**: References that span page boundaries are automatically detected and merged by comparing consecutive block page indices.
+- ✅ **Citation Bracket Layout Handling**: When PDFs place `[N]` citation brackets on separate blocks from their content, the parser merges them via same-page block merging and includes bracket-only blocks in the reference collection.
+- ✅ **Page Number Artifact Filtering**: Standalone page numbers in PDF margins no longer trigger premature bibliography termination.
 - ✅ **Seven-Engine Search**: OpenAlex, Crossref, DataCite, arXiv, DBLP (CS conference/journal proceedings), web search fallback, and direct URL resource fetching.
 - ✅ **Partial arXiv Identifiers**: Enhanced support for extracting arXiv IDs from partial identifiers in reference text (e.g., "arXiv:2403.02221" or "CoRR, abs/1810.04805").
 - ✅ **Rate Limiting & Retry**: Automatic exponential backoff for rate-limited APIs (arXiv, DataCite, OpenAlex).
@@ -284,6 +286,7 @@ pip install .
 
 ## Version History
 
+- **v1.10.0** — PDF bibliography extraction overhaul: handles citation brackets on separate blocks from content (merged via same-page merge), filters page number artifacts from non-reference streak, fixes bibliography header keyword scope bug (prevented detection when keyword was buried in longer text)
 - **v1.9.1** — Fixed title extraction for single-line PDF references: smart period-split avoids false boundaries at author→title and venue bleed points, expanded `COMMON_TITLE_WORDS` with domain-specific terms, tightened venue detection to only flag parts that *start with* "In [Venue]" or known publisher names, added `strip_venue_suffix` support for "In Proceedings" without colon, added standalone first-word surname stripping in `strip_author_header`.
 - **v1.9.0** — International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches), raises RELEVANCE_THRESHOLD from 0.35 to 0.50
 - **v1.8.0** — TTL job cleanup, SSRF protection, underscore URL healing, Unicode author detection

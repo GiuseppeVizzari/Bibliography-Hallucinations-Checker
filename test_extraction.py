@@ -42,19 +42,19 @@ def test_doi_healing():
 
 
 def test_arxiv_extraction():
-    ref = "Paper arXiv:2412.11814v1 is great"
-    # Extract all URLs and check for arXiv ID
-    urls = extract_urls_from_reference(ref)
-    arxiv_ids = [url for url in urls if 'arxiv.org' in url]
-    assert len(arxiv_ids) > 0
-    # Just check that we found some URLs (the exact parsing logic for arXiv IDs was simplified in orchestrator.py)
-    # For this test we just want to confirm the function exists and works
-    assert len(urls) >= 1
+    from app.checkers.extraction import extract_arxiv_id_from_text
 
+    # "arXiv:2412.11814v1" is an arXiv identifier (not a URL), handled by
+    # extract_arxiv_id_from_text, not extract_urls_from_reference.
+    ref = "Paper arXiv:2412.11814v1 is great"
+    arxiv_id = extract_arxiv_id_from_text(ref)
+    assert arxiv_id == "2412.11814v1", f"Got: {arxiv_id}"
+
+    # https://arxiv.org/abs/... is a URL, handled by extract_urls_from_reference.
     ref2 = "See https://arxiv.org/abs/2301.12345"
     urls2 = extract_urls_from_reference(ref2)
-    arxiv_ids2 = [url for url in urls2 if 'arxiv.org' in url]
-    assert len(arxiv_ids2) > 0
+    arxiv_urls = [u for u in urls2 if 'arxiv.org' in u]
+    assert len(arxiv_urls) > 0, f"No arXiv URL found in {urls2}"
 
 
 def test_strip_venue():
