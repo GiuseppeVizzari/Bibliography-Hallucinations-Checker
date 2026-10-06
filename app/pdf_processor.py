@@ -1,4 +1,4 @@
-import fitz
+import pymupdf as fitz
 import logging
 import re
 from .checkers.normalizer import heal_hyphens
@@ -206,16 +206,22 @@ def extract_bibliography(pdf_path):
     _VENUE_YEAR_RE_BLOCK = re.compile(r'\b(?:19|20)\d{2}\b')
 
     def _looks_like_reference(text: str) -> bool:
-        """Heuristic: does this block resemble a bibliographic reference?"""
+        """Heuristic: does this block resemble a bibliographic reference?
+
+        Requires only 1 signal (down from 2) because modern pymupdf text
+        extraction can split a single reference into many narrow blocks, each
+        carrying only one signal (e.g. a year "2021" on one block, author
+        names on another).  The 5-word minimum prevents false positives from
+        short structural blocks.
+        """
         if not text or len(text.split()) < 5:
             return False
-        # Must have at least two of: DOI pattern, author-year bracket, year
         signals = (
             bool(_DOI_RE.search(text))
             + bool(_AUTHOR_YEAR_RE_BLOCK.search(text))
             + bool(_VENUE_YEAR_RE_BLOCK.search(text))
         )
-        return signals >= 2
+        return signals >= 1
 
     def _looks_like_title(text: str) -> bool:
         """Heuristic: does this block look like a section title / header?

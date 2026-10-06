@@ -140,8 +140,8 @@ blocks = page.get_text("blocks")
 
 Identifies the start of the bibliography section by scanning block text for common headings:
 
-- "References", "Bibliography", "Works Cited", "Worked Examples", "Further Reading"
-- Case-insensitive matching
+- "References", "Bibliography", "Works Cited", "Bibliografia", "Riferimenti"
+- Case-insensitive matching, with OCR typo catch "rererences"
 - First match determines the bibliography start point
 
 ### Stage 3: Termination Scanning
@@ -149,27 +149,28 @@ Identifies the start of the bibliography section by scanning block text for comm
 Scans from the bibliography start to find where references end by detecting:
 
 - Section headings (e.g., "Acknowledgments", "Appendix")
-- Author name patterns (e.g., "Smith, J.")
-- Page number patterns
+- ~30 termination keywords including English, Italian, and common variants
+- Appendix table/figure captions and pure numeric table rows
+- Non-reference streak heuristic (consecutive blocks lacking DOI/year/author signals)
 
 ### Stage 4: Reference Splitting
 
 Splits the bibliography text into individual references using **four strategies** in order:
 
-1. **Bracketed numbers**: `\[\d+\]` or `[\d+]` (e.g., `[1]`, `[42]`)
-2. **Numbered**: `\d+[.)]` (e.g., `1.`, `2)`)
-3. **Author-year**: `(Author, Year)` patterns (e.g., `(Smith, 2020)`)
-4. **Fallback**: Blank-line splitting (last resort)
+1. **Bracketed numbers**: `^\s*\[\d+\]` (e.g., `[1]`, `[42]`)
+2. **Numbered**: `^\s*\d+\.` (e.g., `1.`, `2.`)
+3. **Author-year**: Bracketed author-year patterns like `[Author, Year]` (e.g., `[Smith, 2020]`)
+4. **Fallback**: One block per reference (last resort)
 
 Each strategy uses regex to find split points, then extracts reference text between consecutive split points.
 
 ### Line Number Filtering (Three-Layer)
 
-After splitting, each reference undergoes line number filtering to identify the actual citation content:
+A three-layer filter removes line numbers before splitting:
 
-1. **Layer 1**: Strip leading line numbers from each line
-2. **Layer 2**: Detect and strip author headers (e.g., "Smith, J., et al.")
-3. **Layer 3**: Skip lines that are purely line numbers
+1. **Layer 1 — Marginal block detection**: Narrow, purely numeric blocks in the left/right margin (x < 50pt or x > page_width − 50pt) are discarded during block extraction.
+2. **Layer 2 — Embedded line number stripping**: Standalone 1–4 digit lines within a text block are removed from the joined text before splitting.
+3. **Layer 3 — Per-reference cleanup**: Each extracted reference is individually scrubbed of trailing standalone numbers.
 
 The result is a list of cleaned reference strings ready for verification.
 
@@ -221,8 +222,8 @@ Step 1: DOI Lookup
 
 Handles DOIs that are broken across PDF line breaks:
 
-1. Detects DOIs ending with hyphenated segments (e.g., `10.1234/abc-`)
-2. Rejoins the hyphenated DOI: `10.1234/abc-def`
+1. Detects DOIs ending with `10.` when the continuation is separated by space or newline
+2. Rejoins the DOI: `10. 1234/abcd` → `10.1234/abcd`
 3. Retries lookup with healed DOI
 
 #### Step 3: arXiv Lookup
@@ -494,31 +495,11 @@ Display upload form (non-AJAX request).
 
 ### Reference Object Schema
 
-```python
-class Reference:
-    number: int           # Bibliography index
-    original: str         # Raw extracted text
-    line_numbers: List[int]  # Source line numbers in PDF
-    doi: Optional[str]    # Extracted DOI (if any)
-    arxiv_id: Optional[str]  # Extracted arXiv ID (if any)
-    url: Optional[str]    # Extracted URL (if any)
-```
+Current code uses dicts (not classes) with keys: `number`, `original`, `doi`, `arxiv_id`, `url`
 
 ### Check Result Schema
 
-```python
-class CheckResult:
-    status: str           # "found" | "candidate" | "skipped" | "error" | "not_found"
-    source: str           # Backend name ("OpenAlex", "Crossref", etc.)
-    title: str            # Verified title
-    author: str           # Author string
-    pub_year: str         # Publication year
-    venue: str            # Venue/journal name
-    url: str              # Link to source
-    similarity: float     # SequenceMatcher ratio (0.0–1.0)
-    message: Optional[str]  # Error message (if status == "error")
-    reason: Optional[str]   # Skip reason (if status == "skipped")
-```
+Current code uses dicts (not classes) with keys: `status`, `source`, `title`, `author`, `pub_year`, `venue`, `url`, `similarity`, `message`, `reason`
 
 ---
 
@@ -729,6 +710,7 @@ Log levels are configurable via `LOG_LEVEL` environment variable. Key log points
 
 ## Version History
 
+- **v1.11.0**: pymupdf 1.28 compatibility (_looks_like_reference_ signal threshold 2→1 for narrower blocks), habanero 2.9.2 (automatic 429 retry, connection pooling), dependency updates across werkzeug, python-dotenv, ddgs, flask-wtf, pyalex; cleaned up stale test files
 - **v1.9.1**: Fixed title extraction for single-line PDF references: smart period-split avoids false boundaries at author→title and venue bleed points, expanded `COMMON_TITLE_WORDS` with domain-specific terms, tightened venue detection to only flag parts that *start with* "In [Venue]" or known publisher names, added `strip_venue_suffix` support for "In Proceedings" without colon, added standalone first-word surname stripping in `strip_author_header`.
 - **v1.9.0**: International character preservation (replaces NFKD with ligature-only map), length-aware similarity scoring (penalizes substring matches to prevent false positives), raises RELEVANCE_THRESHOLD from 0.35 to 0.50.
 - **v1.8.0**: Added TTL job cleanup (background thread removes completed jobs after 5 min), SSRF protection (IP validation + scheme whitelisting for all URL fetching), underscore URL healing for DOI paths with spaces, and Unicode-aware author detection.
