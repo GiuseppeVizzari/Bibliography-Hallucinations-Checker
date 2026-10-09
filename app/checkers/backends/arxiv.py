@@ -8,7 +8,7 @@ import logging
 import requests
 import threading
 import xml.etree.ElementTree as ET
-from ..config import execute_with_retry, ARXIV_MIN_DELAY
+from ..config import execute_with_retry, ARXIV_MIN_DELAY, REQUEST_TIMEOUT
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class ArxivBackend(BackendService):
             _arxiv_rate_limit()
 
             def _fetch():
-                return requests.get(_API_URL, params={"id_list": arxiv_id}, timeout=10)
+                return requests.get(_API_URL, params={"id_list": arxiv_id}, timeout=REQUEST_TIMEOUT)
 
             response = execute_with_retry(_fetch)
 

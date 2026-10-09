@@ -5,8 +5,15 @@ Helpers to extract structured identifiers and titles from raw reference strings.
 """
 import logging
 import re
-from typing import Optional
-from .normalizer import normalize_ligatures, normalize_quotes, strip_doi_punctuation, strip_venue_suffix, strip_author_header
+from typing import List, Optional, Tuple
+
+from .normalizer import (
+    normalize_ligatures,
+    normalize_quotes,
+    strip_doi_punctuation,
+    strip_venue_suffix,
+    strip_author_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -691,7 +698,7 @@ def _strip_trailing_url(title: str) -> str:
     return title
 
 
-def extract_doi_info(ref_text: str):
+def extract_doi_info(ref_text: str) -> Tuple[Optional[str], int]:
     """
     Extracts a DOI from a reference string.
 
@@ -699,6 +706,10 @@ def extract_doi_info(ref_text: str):
     DOIs broken by PDF line-wrapping (e.g. '10. 1371/journal.pone.0276229' with
     a space after '10.'). Partial DOIs are returned so that heal_doi can
     reconstruct the full identifier.
+    
+    Returns:
+        Tuple of (doi_string, end_position). 
+        If no DOI found, returns (None, 0).
     """
     pattern = r'10\.\d{4,9}/[-._;()/:a-zA-Z0-9]*'
     match = re.search(pattern, ref_text)

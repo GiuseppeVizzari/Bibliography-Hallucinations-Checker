@@ -18,6 +18,7 @@ from app.checkers.config import (
     DBLP_MAX_RESULTS,
     DBLP_MAX_PAGES,
     DBLP_MIN_DELAY,
+    REQUEST_TIMEOUT,
 )
 
 
@@ -38,6 +39,12 @@ class TestDBLPBackendInit(unittest.TestCase):
 
     def test_min_delay(self):
         self.assertEqual(DBLP_MIN_DELAY, 1.0)
+
+    def test_request_timeout(self):
+        # Verify REQUEST_TIMEOUT is set to a reasonable value (not a magic number)
+        self.assertIsInstance(REQUEST_TIMEOUT, int)
+        self.assertGreater(REQUEST_TIMEOUT, 0)
+        self.assertLessEqual(REQUEST_TIMEOUT, 60)  # Reasonable upper bound
 
 
 class TestDBLPBackendLookupByTitle(unittest.TestCase):

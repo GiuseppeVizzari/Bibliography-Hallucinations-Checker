@@ -20,6 +20,7 @@ from ..config import (
     DBLP_MAX_RESULTS,
     DBLP_MAX_PAGES,
     DBLP_MIN_DELAY,
+    REQUEST_TIMEOUT,
 )
 from .base import BackendService
 
@@ -129,7 +130,7 @@ class DBLPBackend(BackendService):
             }
 
             try:
-                response = requests.get(DBLP_API, params=params, timeout=10)
+                response = requests.get(DBLP_API, params=params, timeout=REQUEST_TIMEOUT)
                 response.raise_for_status()
                 data = response.json()
             except requests.RequestException as e:

@@ -5,8 +5,10 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional
 from flask import Blueprint, render_template, request, current_app, jsonify
 from werkzeug.utils import secure_filename
+
 from .pdf_processor import extract_bibliography
 from .checkers import check_reference
 from .checkers.config import MAX_WORKERS
@@ -26,7 +28,7 @@ _cleanup_stop = threading.Event()
 _cleanup_thread = None
 
 
-def _cleanup_worker():
+def _cleanup_worker() -> None:
     """Background thread: remove jobs completed more than 5 minutes ago."""
     while not _cleanup_stop.is_set():
         _cleanup_stop.wait(60)  # run every 60 seconds
@@ -47,7 +49,7 @@ def _cleanup_worker():
 _cleanup_start_lock = threading.Lock()
 
 
-def _ensure_cleanup_thread():
+def _ensure_cleanup_thread() -> None:
     """Start the cleanup thread if not already running.
 
     Thread-safe: only one cleanup thread is ever started, even if this
@@ -62,11 +64,11 @@ def _ensure_cleanup_thread():
         _cleanup_thread.start()
 
 
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def _check_single_ref(index, ref, total):
+def _check_single_ref(index: int, ref: str, total: int) -> Dict[str, Any]:
     """Worker function: check one reference, return result dict."""
     logger.info(f"[{index}/{total}]")
     check_result = check_reference(ref)
@@ -78,7 +80,7 @@ def _check_single_ref(index, ref, total):
     }
 
 
-def _process_job(job_id, filepath, refs):
+def _process_job(job_id: str, filepath: str, refs: List[str]) -> None:
     """Background worker: process a bibliography job and update job state."""
     total = len(refs)
     results = [None] * total
@@ -128,7 +130,7 @@ def _process_job(job_id, filepath, refs):
 
 
 @bp.route('/status/<job_id>', methods=['GET'])
-def job_status(job_id):
+def job_status(job_id: str):
     """Polling endpoint: return job progress as JSON."""
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -161,12 +163,20 @@ def index():
             upload_folder = os.path.join(current_app.root_path, 'uploads')
             os.makedirs(upload_folder, exist_ok=True)
             filepath = os.path.join(upload_folder, filename)
-            file.save(filepath)
+            
+            try:
+                file.save(filepath)
+            except OSError as e:
+                logger.error(f"Failed to save uploaded file {filepath}: {e}", exc_info=True)
+                return jsonify({"error": "Failed to save uploaded file. Please try again."}), 500
 
             # Process PDF
             try:
                 refs = extract_bibliography(filepath)
                 if not refs:
+                    # Clean up the file before returning error
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
                     return jsonify({"error": "No references found or bibliography section not detected."}), 400
 
                 total_refs = len(refs)
@@ -200,6 +210,12 @@ def index():
 
             except Exception as e:
                 logger.error(f"Error processing file: {e}", exc_info=True)
+                # Clean up on error
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except OSError:
+                        pass
                 return jsonify({"error": str(e)}), 500
 
     return render_template('index.html')

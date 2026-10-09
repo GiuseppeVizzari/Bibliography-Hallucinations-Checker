@@ -11,6 +11,8 @@ from functools import lru_cache
 from typing import List
 from urllib.parse import urlparse
 
+from ..config import REQUEST_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 # Private / reserved / special IP ranges that must never be fetched
@@ -143,7 +145,7 @@ def _follow_redirect_safe(url: str) -> str:
 
         validate_url_for_fetch(url)
 
-        resp = requests.get(url, allow_redirects=False, timeout=10)
+        resp = requests.get(url, allow_redirects=False, timeout=REQUEST_TIMEOUT)
         if resp.status_code not in (301, 302, 303, 307, 308):
             return url
 

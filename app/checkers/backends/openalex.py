@@ -7,13 +7,13 @@ OpenAlex API backend — supports DOI lookup and full-text title search.
 import logging
 import os
 import re
-import time
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import pyalex
 from dotenv import load_dotenv
 from pyalex import Works
 
+from ..config import execute_with_retry
 from ..normalizer import (
     RELEVANCE_THRESHOLD,
     calculate_similarity,
@@ -36,26 +36,6 @@ def _ensure_config():
         pyalex.config.email = os.getenv("OPENALEX_EMAIL")
         pyalex.config.api_key = os.getenv("OPENALEX_API_KEY")
         _configured = True
-
-
-def _execute_with_retry(func: Callable, *args, **kwargs) -> Any:
-    """Executes a pyalex function with exponential backoff for 429 errors."""
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            err_msg = str(e).lower()
-            if "429" in err_msg or "too many requests" in err_msg:
-                wait_time = (2**attempt) + 1
-                logger.debug(
-                    f"  [DEBUG] OpenAlex Rate Limit (429). Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})"
-                )
-                time.sleep(wait_time)
-            else:
-                raise e
-    # Final attempt after retries
-    return func(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +107,11 @@ class OpenAlexBackend(BackendService):
         try:
             doi_query = strip_doi_punctuation(doi)
             logger.debug(f"  OpenAlex DOI lookup: {doi_query}...")
-            work = _execute_with_retry(lambda: Works()[doi_query])
+            
+            def fetch_work():
+                return Works()[doi_query]
+            
+            work = execute_with_retry(fetch_work)
             if work:
                 res = _process_work(work)
                 if res:
@@ -157,7 +141,11 @@ class OpenAlexBackend(BackendService):
             query = re.sub(r"[:;.,!?]", " ", clean).strip()
 
             logger.debug(f"  OpenAlex title search: {query[:70]}...")
-            results = _execute_with_retry(lambda: Works().search(query).get())
+            
+            def fetch_results():
+                return Works().search(query).get()
+            
+            results = execute_with_retry(fetch_results)
 
             if not results:
                 # Fallback: Search with only the first ~8 words (often more robust for long titles)
@@ -167,7 +155,11 @@ class OpenAlexBackend(BackendService):
                     logger.debug(
                         f"  → No results for full title. Trying fallback: {short_query}..."
                     )
-                    results = _execute_with_retry(lambda: Works().search(short_query).get())
+                    
+                    def fetch_short_results():
+                        return Works().search(short_query).get()
+                    
+                    results = execute_with_retry(fetch_short_results)
 
             if results:
                 res = _process_work(results[0])

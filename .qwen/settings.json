@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Agent(Explore)",
+      "Bash(python3 *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(git push *)",
+      "Bash(git tag *)",
+      "Bash(gh *)",
+      "Bash(ls *)",
+      "Bash(.venv/bin/pip *)",
+      "Bash(timeout *)",
+      "Bash(true)",
+      "Bash(python *)",
+      "Bash(source *)",
+      "Bash(pip install *)",
+      "Bash(rm *)",
+      "Bash(lsof *)",
+      "Bash(ps *)",
+      "Bash(curl *)",
+      "Bash(git diff *)",
+      "Bash(git ls-remote *)",
+      "Bash(grep *)",
+      "Bash(cd *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(git log *)",
+      "Bash(echo *)",
+      "Bash(git status)"
+    ]
+  },
+  "$version": 4
+}

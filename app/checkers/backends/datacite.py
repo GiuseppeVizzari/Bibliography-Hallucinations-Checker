@@ -7,7 +7,7 @@ DataCite API backend — DOI lookup via REST API.
 import logging
 import requests
 from ..normalizer import strip_doi_punctuation
-from ..config import execute_with_retry
+from ..config import execute_with_retry, REQUEST_TIMEOUT
 from .base import BackendService
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class DataCiteBackend(BackendService):
             logger.debug(f"  DataCite DOI lookup: {doi_query}...")
 
             def _fetch():
-                return requests.get(f"{_API_BASE}/{doi_query}", timeout=10)
+                return requests.get(f"{_API_BASE}/{doi_query}", timeout=REQUEST_TIMEOUT)
 
             response = execute_with_retry(_fetch)
 

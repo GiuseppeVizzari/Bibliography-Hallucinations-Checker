@@ -20,7 +20,9 @@ def test_harnessing_pdf_extraction():
     references [1] through [22].  The old expectation of 23 was from a
     different PDF version.
     """
-    refs = extract_bibliography("PDF for test/harnessing.pdf")
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    pdf_path = os.path.join(test_dir, "PDF for test", "harnessing.pdf")
+    refs = extract_bibliography(pdf_path)
     assert len(refs) == 22, f"Expected 22 references, got {len(refs)}"
 
     # Verify at least one reference has a DOI (regression guard)

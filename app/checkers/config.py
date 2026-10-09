@@ -18,6 +18,10 @@ WEB_BOOST_SNIPPET_CONTAINS = 0.80   # Title found in snippet
 WEB_BOOST_TITLE_OVERLAP = 0.85      # Result title overlaps target title
 WEB_BOOST_LENGTH_MATCH = 0.90       # Very similar-length titles
 
+# --- HTTP timeout settings ---
+
+REQUEST_TIMEOUT = 10  # seconds for all external API requests
+
 # --- URL checker ---
 
 URL_REJECT_FLOOR = 0.20       # Minimum similarity floor for keyword-overlap fallback

@@ -10,6 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 from ddgs import DDGS
 
+from ..config import execute_with_retry, REQUEST_TIMEOUT
 from ..extraction import extract_urls_from_reference
 from ..normalizer import calculate_similarity
 from ..config import (
@@ -27,10 +28,16 @@ logger = logging.getLogger(__name__)
 def _verify_page(url: str, target_title: str) -> bool:
     """
     Fetches the page and checks if the title is present in the <h1> or <title> tags.
+    Uses retry logic for rate-limited requests.
     """
     try:
         validate_url_for_fetch(url)
-        response = requests.get(url, timeout=10)
+        
+        def fetch_page():
+            return requests.get(url, timeout=REQUEST_TIMEOUT)
+        
+        response = execute_with_retry(fetch_page)
+        
         if response.status_code != 200:
             return False
 
@@ -64,12 +71,15 @@ def _try_direct_url_verification(url: str, target_title: str) -> dict:
     """
     Attempts to verify a direct URL (DOI, arXiv) without web search.
     Returns a result dict if successful, otherwise None.
+    Uses retry logic for rate-limited requests.
     """
     try:
         validate_url_for_fetch(url)
-        # If it's an arXiv URL or DOI, we can try to fetch and check the title directly
-        # This is a simplified check - in practice, you might want to do more sophisticated checks
-        response = requests.get(url, timeout=10)
+        
+        def fetch_url():
+            return requests.get(url, timeout=REQUEST_TIMEOUT)
+        
+        response = execute_with_retry(fetch_url)
         if response.status_code == 200:
             # For arXiv, we might want to check the metadata from its API
             # For DOIs, we can use the DOI content negotiation service

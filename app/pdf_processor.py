@@ -1,6 +1,8 @@
 import pymupdf as fitz
 import logging
 import re
+from typing import List, Optional, Tuple
+
 from .checkers.normalizer import heal_hyphens
 
 logger = logging.getLogger(__name__)
@@ -64,10 +66,15 @@ def _is_page_number_artifact(text: str, block_width: float) -> bool:
     return block_width < 30 and re.match(r'^\d{1,3}$', text.strip())
 
 
-def extract_bibliography(pdf_path):
+def extract_bibliography(pdf_path: str) -> List[str]:
     """
     Extracts bibliography references from a PDF.
-    Returns a list of reference strings.
+    
+    Args:
+        pdf_path: Path to the PDF file to process.
+        
+    Returns:
+        A list of reference strings extracted from the bibliography section.
     """
     doc = fitz.open(pdf_path)
     full_text = ""
