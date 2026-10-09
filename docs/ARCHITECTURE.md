@@ -367,11 +367,12 @@ All thresholds and parameters are in `app/checkers/config.py`:
 |-----------|---------|-------------|
 | `RELEVANCE_THRESHOLD` | 0.50 | Minimum similarity for title search to proceed |
 | `WEB_FALLBACK_TRIGGER` | 0.60 | Similarity threshold for triggering web fallback |
-| `DBLP_FOUND_THRESHOLD` | 0.80 | DBLP similarity threshold for "found" status |
-| `DBLP_CANDIDATE_THRESHOLD` | 0.60 | DBLP similarity threshold for "candidate" status |
+| `TITLE_SIMILARITY_THRESHOLD` | 0.75 | Web search page-verification threshold |
+| `DBLP_FOUND_THRESHOLD` | 0.60 | DBLP similarity threshold for "found" status |
+| `DBLP_CANDIDATE_THRESHOLD` | 0.40 | DBLP similarity threshold for "candidate" status |
 | `DBLP_MAX_RESULTS` | 10 | Max results per DBLP query page |
-| `DBLP_MAX_PAGES` | 3 | Max pages to paginate in DBLP search |
-| `DBLP_MIN_DELAY` | 0.5 | Min delay between DBLP requests (seconds) |
+| `DBLP_MAX_PAGES` | 2 | Max pages to paginate in DBLP search |
+| `DBLP_MIN_DELAY` | 1.0 | Min delay between DBLP requests (seconds) |
 
 ### Retry Configuration
 
@@ -379,29 +380,45 @@ All thresholds and parameters are in `app/checkers/config.py`:
 |-----------|---------|-------------|
 | `MAX_RETRIES` | 3 | Max retry attempts for API calls |
 | `RETRY_BASE_DELAY` | 1.0 | Base delay for exponential backoff (seconds) |
-| `RETRY_MAX_DELAY` | 30.0 | Max delay between retries (seconds) |
 
 ### Timeout Configuration
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `REQUEST_TIMEOUT` | 15 | HTTP request timeout (seconds) |
+| `REQUEST_TIMEOUT` | 10 | HTTP request timeout (seconds) |
+
+### URL Checker Configuration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `URL_REJECT_FLOOR` | 0.20 | Minimum similarity floor for keyword-overlap fallback |
+| `URL_KEYWORD_OVERLAP_MIN` | 3 | Minimum overlapping words to accept despite low similarity |
+
+### Pipeline Configuration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAX_WORKERS` | 4 | ThreadPoolExecutor workers for parallel ref checking |
+| `ARXIV_MIN_DELAY` | 3.0 | Minimum seconds between arXiv API requests (their rate limit) |
 
 ### Retry Logic
 
+The `execute_with_retry()` function in `config.py` handles rate-limit retries with exponential backoff:
+
 ```python
-def execute_with_retry(func, *args, **kwargs) -> Optional[dict]:
-    """Execute func with exponential backoff retry."""
-    for attempt in range(MAX_RETRIES):
+def execute_with_retry(func, max_retries=3, *args, **kwargs):
+    """Execute func with exponential backoff on 429 / rate-limit errors."""
+    for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:  # Rate limited
-                delay = min(RETRY_BASE_DELAY * (2 ** attempt), RETRY_MAX_DELAY)
-                time.sleep(delay)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "429" in err_msg or "too many requests" in err_msg:
+                wait = (2 ** attempt) + 1
+                time.sleep(wait)
                 continue
             raise
-    return None
+    return func(*args, **kwargs)
 ```
 
 ---
@@ -581,7 +598,7 @@ The `_jobs` dictionary (used for AJAX polling) is bounded by a background cleanu
 
 ### Request Timeout
 
-All HTTP requests to external APIs use a 15-second timeout to prevent hanging.
+All HTTP requests to external APIs use a 10-second timeout (configurable via `REQUEST_TIMEOUT` in `app/checkers/config.py`) to prevent hanging.
 
 ### SSRF Protection
 

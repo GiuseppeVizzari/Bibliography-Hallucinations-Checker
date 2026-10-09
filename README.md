@@ -286,6 +286,7 @@ pip install .
 
 ## Version History
 
+- **v1.12.0** — Configuration centralization and orchestrator refactoring: centralized all config constants (timeouts, thresholds, limits) in `config.py`, replaced magic timeout numbers with `REQUEST_TIMEOUT` constant, refactored `check_reference()` into focused helper functions (~75 lines from ~200), added comprehensive type hints across routes.py, pdf_processor.py, extraction.py
 - **v1.11.0**: pymupdf 1.28 compatibility (lowered _looks_like_reference_ signal threshold 2→1 for narrower text blocks), habanero 2.9.2 (automatic 429 retry, connection pooling), dependency updates across werkzeug, python-dotenv, ddgs, flask-wtf, pyalex; cleaned up stale test files
 - **v1.10.0** — PDF bibliography extraction overhaul: handles citation brackets on separate blocks from content (merged via same-page merge), filters page number artifacts from non-reference streak, fixes bibliography header keyword scope bug (prevented detection when keyword was buried in longer text)
 - **v1.9.1** — Fixed title extraction for single-line PDF references: smart period-split avoids false boundaries at author→title and venue bleed points, expanded `COMMON_TITLE_WORDS` with domain-specific terms, tightened venue detection to only flag parts that *start with* "In [Venue]" or known publisher names, added `strip_venue_suffix` support for "In Proceedings" without colon, added standalone first-word surname stripping in `strip_author_header`.
