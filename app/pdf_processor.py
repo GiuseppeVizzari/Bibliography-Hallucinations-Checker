@@ -121,8 +121,13 @@ def extract_bibliography(pdf_path: str) -> List[str]:
                 cleaned_blocks.append(b_list)
 
         mid_x = page.rect.width / 2
+        # Sort by horizontal position first (left/right), then vertical within page
         cleaned_blocks.sort(key=lambda b: (0 if b[0] < mid_x else 1, b[1]))
         all_blocks.extend(cleaned_blocks)
+
+    # Sort all blocks by page index to preserve document order,
+    # then by horizontal/vertical position within each page
+    all_blocks.sort(key=lambda b: (b[7], 0 if b[0] < doc[b[7]].rect.width / 2 else 1, b[1]))
 
     total_pages = len(doc)
     doc.close()
@@ -184,6 +189,20 @@ def extract_bibliography(pdf_path: str) -> List[str]:
 
     # 3. Concatenate text until the end of references or a termination header
     ref_content = []
+
+    # Include the References header block itself if it contains reference-like
+    # content (e.g. "References\nBusoniu, L. ... 2008.\nCao, Y. ... 2013.")
+    # Some PDFs pack the first few references into the header block.
+    header_block = all_blocks[ref_start_index]
+    header_text = header_block[4].strip()
+    header_lines = header_text.splitlines()
+    # Skip the first line (the "References" / "Bibliography" keyword) and check
+    # if there's remaining content that looks like references.
+    remaining_lines = [l.strip() for l in header_lines[1:] if l.strip()]
+    if remaining_lines:
+        # Header block contains reference content — add it first
+        ref_content.append(header_text)
+
     termination_keywords = [
         "appendix", "appendices", "annex", "supplementary material", "supplemental material",
         "acknowledgment", "acknowledgments", "author contributions", "conflicts of interest",
@@ -428,12 +447,179 @@ def extract_bibliography(pdf_path: str) -> List[str]:
         logger.info(f"Split into {len(refs)} references (Strategy D: author-year)")
         return refs
 
+    # Strategy E: Author-year without brackets - comprehensive extraction
+    # This handles PDFs that pack all references into a single block
+    # with "Author(s). Year." markers where year may appear on same or different line.
+    
+    # Find all years first
+    year_pattern = re.compile(r'(?<!\d)(19|20)\d{2}\.')
+    year_matches = list(year_pattern.finditer(full_ref_text))
+    
+    if len(year_matches) < 3:
+        # Not enough years to be a real bibliography
+        logger.debug(f"Strategy E: Only found {len(year_matches)} years, skipping")
+    else:
+        logger.info(f"Strategy E: Found {len(year_matches)} year markers")
+        
+        refs = []
+        for i, m in enumerate(year_matches):
+            year_pos = m.start()
+            year_end = m.end()
+
+            # Look backwards from year to find the author block start
+            text_before = full_ref_text[:year_pos].rstrip()
+
+            lines_before = text_before.split('\n')
+
+            # Strategy: Scan backwards from the last line to find where the author block begins.
+            # The author block starts with a line that starts with capital letter + name pattern
+            # and contains comma/semicolon (separating multiple authors).
+            # Then collect all non-blank lines after that start until we reach the year.
+            
+            author_start_idx = None
+            
+            for line_idx in range(len(lines_before) - 1, -1, -1):
+                line = lines_before[line_idx].strip()
+                
+                if not line:
+                    continue
+
+                # Check if this looks like an author start (not a continuation)
+                starts_capital_name = re.match(r'^[A-Z][\w]', line) is not None
+                has_comma_or_semicolon = ',' in line or ';' in line
+
+                # Exclude citation-like lines (venue + page numbers)
+                is_citation_line = (
+                    re.match(r'^[A-Z][\w]+,\s*\d+[\-\–—]?\d*\.?$', line) or
+                    re.match(r'^(In\s+)?(Proceedings|Transactions|Journal)', line, re.IGNORECASE) or
+                    (',' in line and re.search(r',\s*\d+[\-\–—]?\d*\.?$', line) and
+                     len(line.split(',')[0].strip()) <= 15) or
+                    re.match(r'^[\d\-\–—]+\.$', line)
+                )
+                
+                if is_citation_line:
+                    continue
+
+                # For lines with semicolons, check if this is the FIRST author line
+                # (contains multiple "Name, I." patterns) BEFORE checking "and" termination.
+                # Multi-author first lines look like "Schulman, J.; Moritz, P.; ... and"
+                # and end with "and" — we must detect them as author starts, not skip them.
+                if ';' in line:
+                    multi_name_count = len(re.findall(r'[A-Z][\w]+,\s*[A-Z]\.', line))
+                    if multi_name_count >= 2:
+                        author_start_idx = line_idx
+                        break
+                    # Single-name semicolon lines fall through to other checks below
+
+                # If this line ends with "and" or "et al.", it's a continuation.
+                if re.search(r'\b(?:and|et al\.)\s*$', line):
+                    continue
+
+                # Lines ending with comma/semicolon are truncated continuations
+                # from the previous line (PDF line-break artifacts).
+                if re.search(r'[,;]\s*$', line):
+                    continue
+
+                # Single "Name, I." lines need careful handling: they could be
+                # the LAST author (preceded by "and") or the FIRST author
+                # (preceded by a year marker or blank line).
+                single_name = bool(re.match(r'^[A-Z][\w]+,\s*[A-Z][\w]*\.?\s*$', line))
+                if single_name:
+                    # Check the previous non-blank line to determine if this
+                    # is the last author (preceded by "and") or first author.
+                    prev_idx = line_idx - 1
+                    while prev_idx >= 0:
+                        prev_line = lines_before[prev_idx].strip()
+                        if prev_line:
+                            # If preceded by a line ending with "and", this is
+                            # the last author — skip it and keep scanning.
+                            if re.search(r'\b(?:and|et al\.)\s*$', prev_line):
+                                prev_idx -= 1
+                                continue
+                            # Otherwise this is likely the first author — stop here.
+                            break
+                        prev_idx -= 1
+
+                if starts_capital_name and has_comma_or_semicolon:
+                    author_start_idx = line_idx
+                    break
+            
+            if author_start_idx is not None:
+                # Collect all non-blank lines from author start until we hit a year or other reference marker
+                author_lines = []
+                for line_idx in range(author_start_idx, len(lines_before)):
+                    line = lines_before[line_idx].strip()
+
+                    if not line:  # Skip blank lines
+                        continue
+
+                    # Stop if this line contains a year (we've gone past the author block)
+                    if re.search(r'(?<!\d)(19|20)\d{2}\.', line):
+                        break
+
+                    author_lines.append(line)
+
+                if author_lines:
+                    author_text = '\n'.join(author_lines).strip()
+
+                    # Extract reference from author through the year and into the title/venue
+                    # Search the entire block (not just text[:year_pos]) because
+                    # author text may appear after the year marker in multi-line refs
+                    # like "Schulman, J.; ... and\nAbbeel, P. 2015."
+                    ref_start_pos = full_ref_text.rfind(author_text)
+                    if ref_start_pos >= 0:
+                        # Start with extraction up to year end, then continue collecting
+                        # title and venue content until we hit the next reference's author
+                        ref_text = full_ref_text[ref_start_pos:year_end].strip()
+                        
+                        # Continue extracting content after year marker until next reference
+                        remaining_text = full_ref_text[year_end:]
+                        lines_after_year = remaining_text.split('\n')
+                        
+                        for line in lines_after_year:
+                            stripped = line.strip()
+
+                            # Stop if this looks like a new reference (starts with author name pattern)
+                            # Pattern: "Name, I." or "Name, I.; Name, I." at start of line
+                            # Use [\w]+ instead of [a-z]+ to handle Unicode characters like ligatures (ﬁ, ﬂ, etc.)
+                            if re.match(r'^[A-Z][\w]+,', stripped):
+                                has_author_pattern = ',' in stripped or ';' in stripped
+                                author_count = len(re.findall(r'[A-Z][\w]+,\s*[A-Z]\.', stripped))
+                                if has_author_pattern and author_count >= 1:
+                                    # Any line starting with an author pattern is the start of a new reference
+                                    # We should break regardless of what the previous content ends with
+                                    logger.debug(f"  [Strategy E] Author match at line start. Prev content last 30: {ref_text[-30:]}")
+                                    break
+
+                            # Stop if this contains another year marker AND looks like start of new ref
+                            year_match = re.search(r'(?<!\d)(19|20)\d{2}\.', stripped)
+                            if year_match:
+                                pos = year_match.start()
+                                text_before_year = stripped[:pos].strip()
+                                if len(text_before_year) < 50 and re.match(r'^[A-Z]', text_before_year):
+                                    break
+
+                            # Append this line to the reference
+                            ref_text += ' ' + stripped
+                        
+                        # Normalize whitespace
+                        ref_text = re.sub(r'\s+', ' ', ref_text).strip()
+
+                        if len(ref_text) > 15:
+                            refs.append(ref_text)
+        
+        refs = [prune_trailing_garbage(r) for r in refs]
+        refs = [cleanup_ref(r) for r in refs if r.strip()]
+        refs = [r for r in refs if len(r) > 15]
+        logger.info(f"Split into {len(refs)} references (Strategy E: author-year comprehensive)")
+        return refs
+
     # Strategy C: Fallback — one block per reference
     raw_refs = []
     for block_text in ref_content:
         pruned_block = prune_trailing_garbage(block_text)
         text = cleanup_ref(pruned_block)
-        if len(text) > 20:
+        if len(text) > 15:
             raw_refs.append(text)
 
     logger.info(f"Split into {len(raw_refs)} references (Strategy C: fallback)")

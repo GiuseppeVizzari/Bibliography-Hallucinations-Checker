@@ -286,6 +286,7 @@ pip install .
 
 ## Version History
 
+- **v1.13.0** — Strategy E Unicode author detection fix: Changed regex patterns from `[a-z]` to `[\w]+` in author boundary detection to handle Unicode characters like ligatures (ﬁ, ﬂ) and diacritics; this prevents consecutive references with non-ASCII names from incorrectly merging
 - **v1.12.0** — Configuration centralization and orchestrator refactoring: centralized all config constants (timeouts, thresholds, limits) in `config.py`, replaced magic timeout numbers with `REQUEST_TIMEOUT` constant, refactored `check_reference()` into focused helper functions (~75 lines from ~200), added comprehensive type hints across routes.py, pdf_processor.py, extraction.py
 - **v1.11.0**: pymupdf 1.28 compatibility (lowered _looks_like_reference_ signal threshold 2→1 for narrower text blocks), habanero 2.9.2 (automatic 429 retry, connection pooling), dependency updates across werkzeug, python-dotenv, ddgs, flask-wtf, pyalex; cleaned up stale test files
 - **v1.10.0** — PDF bibliography extraction overhaul: handles citation brackets on separate blocks from content (merged via same-page merge), filters page number artifacts from non-reference streak, fixes bibliography header keyword scope bug (prevented detection when keyword was buried in longer text)

@@ -162,6 +162,16 @@ Splits the bibliography text into individual references using **four strategies*
 3. **Author-year**: Bracketed author-year patterns like `[Author, Year]` (e.g., `[Smith, 2020]`)
 4. **Fallback**: One block per reference (last resort)
 
+#### Strategy E: Author-Year Comprehensive Extraction
+
+For author-year references where the format is `Author(s). Year. Title. Venue.`, Strategy E handles complex cases:
+
+- Extracts all year markers from the bibliography text
+- For each year, finds the corresponding author block by scanning backwards
+- Starts extraction from the author through the year marker
+- Continues collecting title and venue content after the year until encountering the next reference's author
+- **Unicode-aware author detection**: Uses `[\w]+` instead of `[a-z]+` in regex patterns to correctly match author names containing Unicode characters like ligatures (ﬁ, ﬂ) or diacritics (e.g., "Omidshaﬁei", "Müller")
+
 Each strategy uses regex to find split points, then extracts reference text between consecutive split points.
 
 ### Line Number Filtering (Three-Layer)
